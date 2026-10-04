@@ -95,7 +95,7 @@ classDiagram
 
 - 型を`class 型名`で，そのモジュールの名前空間の中に描く．型の種類はステレオタイプ(`<<struct>>`，`<<enumeration>>`，`<<trait>>`，`<<type>>`)で示す．
 - 型引数は`~`で囲む(`Repository~S~`，`Vec~WordCount~`)．
-- 型引数に`()`を含む戻り値(`Result<(), Error>`)は，Mermaidで正しく表示できない．`Result`とだけ書き，正確な型を図の下に書く．
+- 型引数に`()`やタプルを含む戻り値(`Result<(), Error>`，`Result<(ObjectKind, Vec<u8>), Error>`)は，Mermaidで正しく表示できない．`Result`とだけ書き，正確な型を図の下に書く．
 - フィールドとメソッドには型を書く．非公開のものには`-`を，公開のものには`+`を付ける．
 - 列挙子は1行に1つ書く．列挙子の持つデータは`InvalidLength: usize`のように`:`の後ろに書く．
 - 標準ライブラリのトレイトの実装は，`+impl Display`のように1行で書く．

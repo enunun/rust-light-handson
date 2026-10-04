@@ -269,11 +269,11 @@ hello
 
 - `rgit cat-file (-t | -s | -p) <object>`は，オブジェクトの種類，大きさ，内容を出力する．
   - `-t`と`-s`は，blob，tree，commitのすべてに使える．
-  - `-p`はblobとcommitに使える．内容をそのまま出力する．treeはIteration 4で扱う．
+  - `-p`は内容をそのまま出力する．blobとcommitは，本物の`git cat-file -p`と同じ出力になる．treeの内容を読みやすく整える表示は，Iteration 4で作る．
 - オブジェクトは，4桁以上40桁以下の16進数で指定できる．
   - 一致するオブジェクトがなければ`Not a valid object name <object>`のエラーにする．
   - 2つ以上一致すれば`short object ID <object> is ambiguous`のエラーにする．
-- ヘッダーが壊れている，または大きさが内容と合わなければエラーにする．
+- ヘッダーが壊れている，または大きさが内容と合わなければ，`corrupt object: <理由>`のエラーにする．
 
 ### 使用例
 
