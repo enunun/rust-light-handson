@@ -351,6 +351,7 @@ $ rgit ls-tree aae2b36
 - `rgit add <path>...`は，指定したファイル，またはディレクトリの下のすべてのファイルをblobとして書き込み，インデックスに登録する．
   - `.git`は含めない．実行可能なファイルのモードは`100755`，ほかは`100644`とする．
   - 指定したパスの下のファイルが作業ディレクトリから消えていれば，そのファイルをインデックスから除く．
+  - 一致するファイルがなければ`pathspec '<path>' did not match any files`のエラーにする．作業ディレクトリの外を指定すると，エラーにする．
 - `rgit ls-files`はインデックスのパスを，`rgit ls-files --stage`は`<モード> <ID> 0\t<パス>`を1行ずつ出力する．
 - 本物の`git`は`rgit`が書いたインデックスを読め，`rgit`は`git add`で書いたインデックスを読める．
 
@@ -368,10 +369,13 @@ $ git ls-files --stage
 
 ### モジュール
 
-- `index`：`pub struct Index`(`BTreeMap<String, IndexEntry>`を持つ)，`pub struct IndexEntry`，`Index::parse`，`Index::to_bytes`，`Index::load`，`Index::save`
+- `index`：`pub struct Index`(`BTreeMap<String, IndexEntry>`を持つ)，`pub struct IndexEntry`，ファイルの状態`pub struct Stat`
+- `index`：`Index::parse`，`Index::to_bytes`，`Index::load`，`Index::save`
 - `worktree`：`pub fn list_files(work_dir: &Path, dir: &Path) -> Result<Vec<String>, Error>`
+- `worktree`：`pub fn relative_path(work_dir: &Path, path: &Path) -> Option<String>`
 - `tree`：`Mode`に`u32`との変換を加える．
-- `repo`：`Repository::add`
+- `oid`：20バイトの値を返す`ObjectId::as_bytes`を加える．
+- `repo`：`Repository`に作業ディレクトリの場所を加える．`Repository::index_path`，`Repository::add`
 - `cli`：`add`と`ls-files`のサブコマンド
 
 ### 図の更新
@@ -381,8 +385,8 @@ $ git ls-files --stage
 ### 学ぶこと
 
 - Rust：`u32::from_be_bytes`と`to_be_bytes`，`as`による整数の変換，`Vec::extend_from_slice`，バイト列を先頭から読む小さな読み取り器
-- Rust：`BTreeMap`と`range`，`std::os::unix::fs::MetadataExt`と`PermissionsExt`
-- Rust：再帰と`Result`，`fs::read_dir`と`DirEntry`，クロージャ，`collect::<Result<Vec<_>, _>>()`
+- Rust：`BTreeMap`，`std::os::unix::fs::MetadataExt`と`PermissionsExt`
+- Rust：再帰と`Result`，`fs::read_dir`と`DirEntry`，クロージャ，`filter`と`cloned`，`collect::<Result<Vec<_>, _>>()`
 - Git：インデックス(ステージングエリア)の役割と形式，ファイルの状態の記録
 
 ### 受講者が行うツール操作

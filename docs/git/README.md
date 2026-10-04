@@ -9,3 +9,4 @@
 | [2](iteration-02.md) | `.git`の構成，`HEAD`，ゆるいオブジェクト，zlib |
 | [3](iteration-03.md) | オブジェクトを読む手順，`git cat-file`，短縮形の解決と曖昧さ |
 | [4](iteration-04.md) | treeオブジェクト，`git ls-tree`，ファイルのモード，treeの内容のバイト列 |
+| [5](iteration-05.md) | インデックスの役割，ファイルの状態，インデックスの形式 |
