@@ -1,12 +1,12 @@
 # ロードマップ
 
 このハンズオンでは，Gitの互換実装`rgit`を，12回のIterationで少しずつ育てる．
-オブジェクトのハッシュの計算から始めて，オブジェクトデータベース，ツリーとコミット，参照とブランチ，履歴をたどる`log`，ブランチの切り替えまでを作る．
-最後の2回で，ツリーの書き込みとリポジトリの検査をスレッドで並列にする．
+オブジェクトのハッシュの計算から始めて，オブジェクトデータベース，ツリー，インデックス，コミット，参照，`log`，`status`，`diff`までを作る．
+最後のIterationで，ファイルのハッシュの計算をスレッドで並列にする．
 
 `rgit`は本物のGitと同じ形式でリポジトリを読み書きする．
 `rgit`で作ったコミットは`git log`で読め，`git`で作ったリポジトリは`rgit`で読める．
-テストでは本物の`git`を呼び出し，同じ入力から同じハッシュができることを確かめる．
+テストでは本物の`git`を呼び出し，同じ操作から同じハッシュと同じ出力ができることを確かめる．
 
 ## 完成形
 
@@ -17,6 +17,10 @@ $ rgit init
 Initialized empty Git repository in /home/alice/demo/.git/
 $ printf 'hello\n' > hello.txt
 $ mkdir src && printf 'fn main() {}\n' > src/main.rs
+$ rgit add .
+$ rgit status
+A  hello.txt
+A  src/main.rs
 $ export GIT_AUTHOR_NAME=Alice GIT_AUTHOR_EMAIL=alice@example.com GIT_AUTHOR_DATE='@1767225600 +0900'
 $ export GIT_COMMITTER_NAME=Alice GIT_COMMITTER_EMAIL=alice@example.com GIT_COMMITTER_DATE='@1767225600 +0900'
 $ rgit commit -m first
@@ -27,46 +31,49 @@ author Alice <alice@example.com> 1767225600 +0900
 committer Alice <alice@example.com> 1767225600 +0900
 
 first
-$ rgit ls-tree HEAD
-100644 blob ce013625030ba8dba906f756967f9e9ca394464a	hello.txt
-040000 tree 5d90422423db5ef6b431e8b9e60e0baf04b8742a	src
 $ printf 'world\n' >> hello.txt
+$ printf 'notes\n' > todo.txt
+$ rgit status
+ M hello.txt
+?? todo.txt
+$ rgit diff
+diff --git a/hello.txt b/hello.txt
+index ce01362..94954ab 100644
+--- a/hello.txt
++++ b/hello.txt
+@@ -1 +1,2 @@
+ hello
++world
+$ rgit add hello.txt
 $ export GIT_AUTHOR_DATE='@1767229200 +0900' GIT_COMMITTER_DATE='@1767229200 +0900'
 $ rgit commit -m second
-[main 6802a29] second
+[main 85cd268] second
 $ rgit log
-6802a29 second
+85cd268 second
 6c04901 first
 $ git log --oneline
-6802a29 second
+85cd268 second
 6c04901 first
 ```
 
-ブランチを作って切り替えると，作業ディレクトリのファイルがそのブランチのコミットの内容に置き換わる．
-`fsck`は，すべてのオブジェクトのハッシュと，オブジェクトの間の参照を複数のスレッドで検査する．
+ファイルの多いディレクトリでは，`add`と`status`がファイルの読み込みとハッシュの計算を複数のスレッドで行う．
 
 ```console
-$ rgit switch -c topic HEAD~1
-Switched to a new branch 'topic'
-$ cat hello.txt
-hello
-$ rgit branch
-  main
-* topic
-$ rgit fsck --jobs 4
-checked 8 objects
+$ rgit status --jobs 8
+?? todo.txt
+$ rgit add --jobs 8 .
+$ rgit status --jobs 8
+A  todo.txt
 ```
 
 ## 対応するGitの範囲
 
-- オブジェクト：blob，tree，commitを，ゆるいオブジェクト(`.git/objects/xx/…`)として読み書きする．パックファイルは扱わない．
-- 参照：`HEAD`，`refs/heads/`の下のブランチ，シンボリック参照．`packed-refs`は扱わない．
+- オブジェクト：blob，tree，commitを，ゆるいオブジェクト(`.git/objects/xx/…`)として読み書きする．
+- インデックス：`.git/index`の版2を読み書きする．拡張は読み飛ばし，書かない．
+- 作業ディレクトリ：通常のファイルと実行可能なファイルを扱う．
+- 参照：`HEAD`，`refs/heads/`の下のブランチ，シンボリック参照．
 - リビジョンの指定：40桁と短縮形のオブジェクトID，`HEAD`，ブランチ名，末尾の`~N`．
-- コマンド：`init`，`hash-object`，`cat-file`，`ls-tree`，`write-tree`，`commit-tree`，`commit`，`rev-parse`，`branch`，`log`，`switch`，`fsck`．
-
-`rgit`はインデックス(ステージングエリア)を持たない．
-`rgit write-tree`と`rgit commit`は，作業ディレクトリのファイルをすべて(`.git`を除く)記録する．
-本物のGitで`git add -A`をしてから`git write-tree`をした結果と同じツリーができる．
+- コマンド：`init`，`hash-object`，`cat-file`，`ls-tree`，`add`，`ls-files`，`write-tree`，`commit-tree`，`commit`，`rev-parse`，`branch`，`log`，`status`，`diff`．
 
 ## Iterationの進め方
 
@@ -88,7 +95,7 @@ Iteration 1からの`exercise/`は，1つ前のIterationの`solution/`と同じ�
 
 ## テストの分け方
 
-- 単体テストは，各モジュールの`#[cfg(test)] mod tests`に書く．オブジェクトIDの変換，ヘッダーやツリーの解析，コミットの直列化，参照名の検査など，モジュールの関数を直接確かめる．
+- 単体テストは，各モジュールの`#[cfg(test)] mod tests`に書く．オブジェクトIDの変換，ヘッダーやツリーの解析，インデックスのバイト列，コミットの直列化，差分の計算など，モジュールの関数を直接確かめる．
 - 結合テストは，パッケージの`tests/`に書く．一時ディレクトリにリポジトリを作り，`rgit::cli::run`にコマンドラインの引数を渡して，出力とリポジトリの中身を確かめる．
   - Iteration 2からは，同じ操作を本物の`git`でも行い，ハッシュや出力が一致することを確かめる．
 
@@ -97,17 +104,17 @@ Iteration 1からの`exercise/`は，1つ前のIterationの`solution/`と同じ�
 | # | 作る機能 | Rustで学ぶこと | Gitで学ぶこと |
 | --- | --- | --- | --- |
 | 0 | blobのハッシュの計算 | Cargo，関数，`&[u8]`と`Vec<u8>`，外部クレート，`#[test]` | 内容アドレス，blobとSHA-1 |
-| 1 | オブジェクトID | 所有権，ムーブ，借用，`Copy`，ニュータイプ，`Display`と`FromStr`，エラーの`enum` | オブジェクトIDと16進表記 |
+| 1 | オブジェクトID | 所有権，ムーブ，借用，`Copy`，ニュータイプ，`Display`と`FromStr` | オブジェクトIDと16進表記 |
 | 2 | `init`と`hash-object -w` | clapのderive，`Path`と`PathBuf`，`std::fs`，`Write`トレイト，thiserrorと`?` | `.git`の構成，ゆるいオブジェクトとzlib |
 | 3 | `cat-file` | `Read`トレイト，スライスの分割，ライフタイムの省略，`Option`と`Result`の変換 | オブジェクトのヘッダー，IDの短縮形 |
-| 4 | ツリーの読み取りと`ls-tree` | データを持つ`enum`，ライフタイム注釈，借用で読む解析，`TryFrom` | treeオブジェクト，ファイルのモード |
-| 5 | `write-tree` | 再帰，`fs::read_dir`，クロージャ，`collect`と`Result`，`Ord`，`Cow` | 作業ディレクトリからツリーを作る，エントリーの並び順 |
-| 6 | `commit-tree` | ジェネリクス，`PhantomData`，型状態パターンのビルダー，環境変数 | commitオブジェクト，署名と時刻 |
-| 7 | 参照，`commit`，`branch` | 検査済みのニュータイプ，`Drop`とRAII，`self`を消費するメソッド | 参照，`HEAD`，シンボリック参照，ロックファイル |
-| 8 | `log` | `Iterator`の実装，構造体の中の参照，`BinaryHeap`，`HashSet`，`impl Trait` | コミットのグラフ，`~N` |
-| 9 | オブジェクトストアの抽象化と`switch` | トレイトの設計，ジェネリクスとトレイトオブジェクト，既定の型引数 | ツリーの差分とチェックアウト |
-| 10 | `write-tree`の並列化 | `std::thread::scope`，`Send`と`Sync`，`Mutex`，内部可変性 | オブジェクトの書き込みの原子性 |
-| 11 | 並列の`fsck` | `thread::spawn`と`'static`，`Arc`，`mpsc`のチャネル，アトミック変数 | 到達可能性，オブジェクトの検査 |
+| 4 | ツリーの読み取りと`ls-tree` | ライフタイム注釈，参照を持つ構造体，`TryFrom` | treeオブジェクト，ファイルのモード |
+| 5 | インデックス，`add`，`ls-files` | バイト列の読み書き，`from_be_bytes`，`BTreeMap`，再帰，`collect`と`Result` | インデックスの形式，ステージング |
+| 6 | `write-tree`と`commit-tree` | `Ordering`とイテレータの比較，ジェネリクス，`PhantomData`，型状態パターン | インデックスからツリーを作る，commitオブジェクト |
+| 7 | 参照，`commit`，`branch` | 検査済みのニュータイプ，`Drop`とRAII，`self`を消費するメソッド | 参照，`HEAD`，ロックファイル |
+| 8 | `log` | `Iterator`の実装，構造体の中の参照，`BinaryHeap`，`HashSet` | コミットのグラフ，`~N` |
+| 9 | オブジェクトストアの抽象化と`status` | トレイトの設計，ジェネリクスとトレイトオブジェクト，`BTreeMap`の突き合わせ | HEAD，インデックス，作業ディレクトリの3者の比較 |
+| 10 | `diff` | トレイト境界を持つジェネリック関数，`enum`による編集の表現，`fmt::Write` | Myersの差分アルゴリズム，unified形式 |
+| 11 | `add`と`status`の並列化 | `std::thread::scope`，`Send`と`Sync`，`Mutex`，チャネル | オブジェクトの書き込みの原子性 |
 
 ## Iteration 0：blobのハッシュの計算
 
@@ -135,7 +142,7 @@ ce013625030ba8dba906f756967f9e9ca394464a
 
 ### モジュール
 
-- `object`：`pub fn hash_blob(data: &[u8]) -> String`
+- `object`：`pub fn hash_blob(data: &[u8]) -> String`，バイト列を16進数の文字列にする`fn to_hex(bytes: &[u8]) -> String`
 - `lib.rs`：`mod object;`と`pub use`
 - `main.rs`：標準入力を読み，`hash_blob`の結果を出力する．
 
@@ -145,7 +152,8 @@ ce013625030ba8dba906f756967f9e9ca394464a
 
 ### 学ぶこと
 
-- Rust：Cargoのパッケージとクレート，`Cargo.toml`，`fn`，整数型と`u8`，バイト列のリテラル`b"…"`，`&[u8]`と`Vec<u8>`の基本，`String`と`format!`，`for`，`mod`と`pub use`，`#[test]`と`assert_eq!`，`sha1`クレートの`Digest`
+- Rust：Cargoのパッケージとクレート，`Cargo.toml`，`fn`，整数型と`u8`，バイト列のリテラル`b"…"`，`&[u8]`と`Vec<u8>`の基本
+- Rust：`String`と`format!`，`for`，`mod`と`pub use`，`#[test]`と`assert_eq!`，`sha1`クレートの`Digest`
 - Git：内容アドレス(内容からIDが決まる)，blobオブジェクトの形式，SHA-1
 
 ### 受講者が行うツール操作
@@ -182,22 +190,22 @@ assert_eq!("ce01".parse::<ObjectId>(), Err(ParseObjectIdError::InvalidLength(4))
 ### モジュール
 
 - `oid`：`pub struct ObjectId([u8; 20])`，`impl Display`，`impl FromStr`，`pub fn short(&self) -> String`，`pub enum ParseObjectIdError`
-- `object`：`hash_blob`の戻り値を`ObjectId`にする．
+- `object`：`hash_blob`の戻り値を`ObjectId`にする．`to_hex`は`ObjectId`の`Display`に移す．
 
 ### 図の更新
 
-- `types.md`：`oid`の名前空間に`ObjectId`と`ParseObjectIdError`を加え，`Display`と`FromStr`の実装を描く．`object`から`ObjectId`への依存を描く．
+- `types.md`：`oid`の名前空間に`ObjectId`と`ParseObjectIdError`を加え，`Display`と`FromStr`の実装を書く．`object`から`ObjectId`への依存を描く．
 
 ### 学ぶこと
 
 - Rust：所有権，ムーブ，借用(`&`と`&mut`)，`Copy`と`Clone`，固定長の配列`[u8; 20]`
-- Rust：タプル構造体とニュータイプパターン，`impl`とメソッド，`#[derive]`，`Display`と`FromStr`の実装，`str::parse`，エラーの`enum`，`?`
-- ツール：RustOwlで，変数の所有権がムーブする位置と借用の範囲を見る．
+- Rust：タプル構造体とニュータイプパターン，`impl`とメソッド，`#[derive]`，`Display`と`FromStr`の実装，`str::parse`，データを持つ`enum`によるエラー
+- ツール：RustOwlで，値の所有権がムーブする位置と借用の範囲を見る．
 - Git：オブジェクトIDの16進表記と短縮形
 
 ### 既存テストへの影響
 
-- `hash_blob`の結果を`String`と比べていたテストを，`to_string()`の結果と比べるように変える．
+- `hash_blob`の結果を文字列と比べていたテストを，`to_string()`の結果と比べるように変える．
 
 ## Iteration 2：`init`と`hash-object -w`
 
@@ -208,7 +216,7 @@ assert_eq!("ce01".parse::<ObjectId>(), Err(ParseObjectIdError::InvalidLength(4))
 - `rgit hash-object [-w] <file>`は，ファイルのblobとしてのIDを出力する．
   - `-w`があれば，オブジェクトをリポジトリに書き込む．書き込み先は`.git/objects/<IDの先頭2桁>/<残りの38桁>`で，内容はヘッダーと内容をzlibで圧縮したものである．
   - リポジトリは，カレントディレクトリから親へ順に`.git`を探して見つける．見つからなければ`not a git repository`のエラーにする．
-- エラーは標準エラー出力に`fatal: <メッセージ>`と出力し，終了コード128で終わる．
+- エラーは標準エラー出力に`fatal: <メッセージ>`と出力し，終了コード128で終わる．引数の誤りはclapのメッセージを出力し，終了コード2で終わる．
 - 本物の`git`は，`rgit`が書いたオブジェクトを読める．
 
 ### 使用例
@@ -228,12 +236,12 @@ hello
 - `cli`：clapのderiveによる`struct Cli`と`enum Command`，`pub fn run(args: &[&str], cwd: &Path, out: &mut impl Write) -> Result<(), Error>`
 - `repo`：`pub struct Repository`，`Repository::init`，`Repository::discover`，`Repository::write_blob`
 - `error`：thiserrorによる`pub enum Error`
-- `object`：`hash_blob`を，ヘッダーと内容を連結したバイト列を作る関数と，そのハッシュを計算する関数に分ける(リファクタリング)．
-- `main.rs`：`cli::run`を呼び，エラーを`fatal:`の形で出力する．
+- `object`：ヘッダーと内容を連結したバイト列を作る`blob_bytes`を加え，`hash_blob`はそのハッシュを計算する(リファクタリング)．
+- `main.rs`：`cli::run`を呼び，エラーを出力する．
 
 ### 図の更新
 
-- `types.md`：`cli`，`repo`，`error`の名前空間と，`Cli`，`Command`，`Repository`，`Error`を加える．`Error`が`io::Error`を包むことを描く．
+- `types.md`：`cli`，`repo`，`error`の名前空間と，`Cli`，`Command`，`Repository`，`Error`を加える．`cli`から`Repository`への依存を描く．
 
 ### 学ぶこと
 
@@ -247,10 +255,12 @@ hello
 - `cargo add clap --features derive`，`cargo add flate2 thiserror`で依存を追加する．
 - `cargo add --dev tempfile`で，テストだけで使う依存を追加する．
 - `cargo run -- init`のように，`--`の後ろにプログラムの引数を渡す．
+- `cargo test --test 名前`で，1つの結合テストのファイルだけを実行する．
+- `cargo install --path .`で`rgit`をインストールし，別のディレクトリで試す．
 
 ### 既存テストへの影響
 
-- `src/main.rs`は標準入力を読まなくなる．標準入力のハッシュの計算は，Iteration 2の発展課題(`hash-object --stdin`)で戻す．
+- `src/main.rs`は標準入力を読まなくなる．標準入力のハッシュの計算は，発展課題の`hash-object --stdin`で扱う．
 
 ## Iteration 3：`cat-file`
 
@@ -278,7 +288,8 @@ hello
 ### モジュール
 
 - `object`：`pub enum ObjectKind { Blob, Tree, Commit }`，`impl FromStr`と`impl Display`，`pub fn parse_header(data: &[u8]) -> Result<(ObjectKind, &[u8]), Error>`
-- `repo`：`Repository::read_raw`(種類と内容を返す)，`Repository::resolve_prefix`
+- `object`：`blob_bytes`を一般にし，種類も引数で受け取る`encode`にする．
+- `repo`：`Repository::read_object`(種類と内容を返す)，`Repository::resolve_prefix`
 - `cli`：`cat-file`のサブコマンド．`-t`，`-s`，`-p`はどれか1つだけを指定できる．
 
 ### 図の更新
@@ -313,9 +324,7 @@ $ rgit ls-tree aae2b36
 
 - `tree`：`pub enum Mode`(`TryFrom<&[u8]>`)，`pub struct TreeEntry<'a> { mode, name: &'a str, id }`
 - `tree`：`pub fn parse_tree(data: &[u8]) -> Result<Vec<TreeEntry<'_>>, Error>`
-- `object`：`pub enum Object { Blob(Vec<u8>), Tree(Vec<u8>), Commit(Vec<u8>) }`
-- `repo`：`Repository::read_object`
-- `cli`：`ls-tree`のサブコマンド
+- `cli`：`ls-tree`のサブコマンド．`cat-file -p`でtreeを扱う．
 
 ### 図の更新
 
@@ -323,63 +332,83 @@ $ rgit ls-tree aae2b36
 
 ### 学ぶこと
 
-- Rust：データを持つ`enum`と`match`による分解，ライフタイム注釈`'a`，参照を持つ構造体，元のバイト列を借用したまま解析する設計と，所有するデータに変換する設計の比較，`TryFrom`と`TryInto`，スライスから配列への変換
+- Rust：ライフタイム注釈`'a`，参照を持つ構造体，元のバイト列を借用したまま解析する設計と，所有するデータに写す設計の比較
+- Rust：`TryFrom`と`TryInto`，スライスから配列への変換，`matches!`
 - ツール：RustOwlで，`TreeEntry`の名前が元のバイト列を借用している範囲を見る．
 - Git：treeオブジェクトの形式，ファイルのモード
 
-## Iteration 5：`write-tree`
+## Iteration 5：インデックス，`add`，`ls-files`
 
 ### 要件
 
-- `rgit write-tree`は，作業ディレクトリのファイルからtreeとblobを作って書き込み，最上位のtreeのIDを出力する．
-  - `.git`は含めない．ファイルを含まないディレクトリは記録しない．
-  - 実行可能なファイルのモードを`100755`，シンボリックリンクのモードを`120000`とする．シンボリックリンクのblobの内容はリンク先のパスである．
-  - エントリーはGitの順序で並べる．ディレクトリの名前は，末尾に`/`があるものとして比べる．
-- 結果は，同じ作業ディレクトリで`git add -A && git write-tree`をしたものと一致する．
+- インデックス`.git/index`(版2)を読み書きする．
+  - ヘッダーは`DIRC`，版，エントリーの数である．数はビッグエンディアンの32ビット整数である．
+  - エントリーは，ファイルの状態(作成と変更の時刻，デバイス，iノード，モード，所有者，大きさ)，ID，フラグ，パスからなり，NULで8バイトの境界まで埋める．
+  - 末尾には，それより前のバイト列のSHA-1を置く．読むときに検査し，合わなければエラーにする．
+  - 拡張は読み飛ばす．エントリーはパスのバイト順に並べる．
+- `rgit add <path>...`は，指定したファイル，またはディレクトリの下のすべてのファイルをblobとして書き込み，インデックスに登録する．
+  - `.git`は含めない．実行可能なファイルのモードは`100755`，ほかは`100644`とする．
+  - 指定したパスの下のファイルが作業ディレクトリから消えていれば，そのファイルをインデックスから除く．
+- `rgit ls-files`はインデックスのパスを，`rgit ls-files --stage`は`<モード> <ID> 0\t<パス>`を1行ずつ出力する．
+- 本物の`git`は`rgit`が書いたインデックスを読め，`rgit`は`git add`で書いたインデックスを読める．
+
+### 使用例
+
+```console
+$ rgit add .
+$ rgit ls-files --stage
+100644 ce013625030ba8dba906f756967f9e9ca394464a 0	hello.txt
+100644 f328e4d9d04c31d0d70d16d21a07d1613be9d577 0	src/main.rs
+$ git ls-files --stage
+100644 ce013625030ba8dba906f756967f9e9ca394464a 0	hello.txt
+100644 f328e4d9d04c31d0d70d16d21a07d1613be9d577 0	src/main.rs
+```
+
+### モジュール
+
+- `index`：`pub struct Index`(`BTreeMap<String, IndexEntry>`を持つ)，`pub struct IndexEntry`，`Index::parse`，`Index::to_bytes`，`Index::load`，`Index::save`
+- `worktree`：`pub fn list_files(work_dir: &Path, dir: &Path) -> Result<Vec<String>, Error>`
+- `tree`：`Mode`に`u32`との変換を加える．
+- `repo`：`Repository::add`
+- `cli`：`add`と`ls-files`のサブコマンド
+
+### 図の更新
+
+- `types.md`：`index`と`worktree`の名前空間を加え，`Index`が`IndexEntry`を持ち，`IndexEntry`が`Mode`と`ObjectId`を持つことを描く．
+
+### 学ぶこと
+
+- Rust：`u32::from_be_bytes`と`to_be_bytes`，`as`による整数の変換，`Vec::extend_from_slice`，バイト列を先頭から読む小さな読み取り器
+- Rust：`BTreeMap`と`range`，`std::os::unix::fs::MetadataExt`と`PermissionsExt`
+- Rust：再帰と`Result`，`fs::read_dir`と`DirEntry`，クロージャ，`collect::<Result<Vec<_>, _>>()`
+- Git：インデックス(ステージングエリア)の役割と形式，ファイルの状態の記録
+
+### 受講者が行うツール操作
+
+- `xxd`で`.git/index`のバイト列を表示して，形式を確かめる．
+
+## Iteration 6：`write-tree`と`commit-tree`
+
+### 要件
+
+- `rgit write-tree`は，インデックスからtreeオブジェクトを作って書き込み，最上位のtreeのIDを出力する．
+  - ディレクトリごとにtreeを作る．エントリーはGitの順序で並べる．ディレクトリの名前は，末尾に`/`があるものとして比べる．
+  - 結果は，同じインデックスで`git write-tree`をしたものと一致する．
+- commitオブジェクトを作り，解析し，直列化する．
+  - 内容は`tree`，0個以上の`parent`，`author`，`committer`の行，空行，メッセージである．
+  - 署名は`<名前> <<メール>> <UNIX時刻> <±hhmm>`の形である．
+- `rgit commit-tree <tree> [-p <parent>]... -m <message>`は，commitを書き込み，そのIDを出力する．
+  - 作者とコミッターは環境変数`GIT_AUTHOR_NAME`，`GIT_AUTHOR_EMAIL`，`GIT_AUTHOR_DATE`，`GIT_COMMITTER_NAME`，`GIT_COMMITTER_EMAIL`，`GIT_COMMITTER_DATE`から読む．
+  - 時刻は`@<UNIX時刻> <±hhmm>`の形とし，省略すれば現在の時刻と`+0000`を使う．名前かメールがなければエラーにする．
+  - メッセージの末尾には改行を1つ付ける．
+  - 同じ環境変数で本物の`git commit-tree`を実行した結果と，IDが一致する．
+- `cat-file -p`は，commitを解析してから直列化して出力する．
 
 ### 使用例
 
 ```console
 $ rgit write-tree
 aae2b3618f4a481bc1bde056dae4b7617edb7e83
-$ git add -A && git write-tree
-aae2b3618f4a481bc1bde056dae4b7617edb7e83
-```
-
-### モジュール
-
-- `tree`：`pub struct Tree { entries: Vec<OwnedTreeEntry> }`，`Tree::to_bytes`，エントリーの並べ替え
-- `worktree`：`pub fn write_tree(repo: &Repository, dir: &Path) -> Result<ObjectId, Error>`
-- `cli`：`write-tree`のサブコマンド
-
-### 図の更新
-
-- `types.md`：`worktree`の名前空間と，`Tree`を加える．`worktree`から`Repository`と`Tree`への依存を描く．
-
-### 学ぶこと
-
-- Rust：再帰と`Result`，`fs::read_dir`と`DirEntry`，`std::os::unix::fs::PermissionsExt`
-- Rust：クロージャ，イテレータの`filter_map`と`map`，`collect::<Result<Vec<_>, _>>()`
-- Rust：`Ord`と`Ordering`，`sort_by`，`Cow`による借用と所有の切り替え
-- Git：作業ディレクトリからツリーを組み立てる手順，エントリーの並び順
-
-## Iteration 6：`commit-tree`
-
-### 要件
-
-- commitオブジェクトを作り，解析し，直列化する．
-  - 内容は`tree`，0個以上の`parent`，`author`，`committer`の行，空行，メッセージである．
-  - 署名は`<名前> <<メール>> <UNIX時刻> <±hhmm>`の形である．
-- `rgit commit-tree <tree> [-p <parent>]... -m <message>`は，commitを書き込み，そのIDを出力する．
-  - 作者とコミッターは環境変数`GIT_AUTHOR_NAME`，`GIT_AUTHOR_EMAIL`，`GIT_AUTHOR_DATE`，`GIT_COMMITTER_NAME`，`GIT_COMMITTER_EMAIL`，`GIT_COMMITTER_DATE`から読む．時刻は`@<UNIX時刻> <±hhmm>`の形とし，省略すれば現在の時刻と`+0000`を使う．
-  - 名前かメールがなければエラーにする．
-  - メッセージの末尾には改行を1つ付ける．
-- 同じ環境変数で本物の`git commit-tree`を実行した結果と，IDが一致する．
-- `cat-file -p`は，commitを解析してから直列化して出力する．
-
-### 使用例
-
-```console
 $ rgit commit-tree aae2b36 -m first
 6c049013df700446ee9afd1bdaa0303bf75d842f
 ```
@@ -393,37 +422,41 @@ let commit = Commit::builder()
     .build();
 ```
 
-`tree`と`author`を呼ぶ前の`build`はコンパイルエラーになる．
+`tree`，`author`，`committer`を呼ぶ前の`build`はコンパイルエラーになる．
 
 ### モジュール
 
-- `commit`：`pub struct Signature`，`pub struct Commit`，`Commit::parse`，`Commit::to_bytes`，`pub struct CommitBuilder<T, A>`
-- `object`：`Object::Commit`の中身を`Commit`にする．
-- `cli`：`commit-tree`のサブコマンド．`run`に環境変数を渡せるようにする(`struct Env`)．
+- `tree`：`pub fn tree_bytes(entries: &[TreeEntry]) -> Vec<u8>`，エントリーの順序を決める関数
+- `repo`：`Repository::write_tree`
+- `commit`：`pub struct Signature`，`pub struct Commit`，`Commit::parse`，`Commit::to_bytes`，`pub struct CommitBuilder<T, A, C>`と状態を表す型
+- `cli`：`write-tree`と`commit-tree`のサブコマンド．`run`は環境変数を`&HashMap<String, String>`で受け取る．
 
 ### 図の更新
 
-- `types.md`：`commit`の名前空間に`Commit`，`Signature`，`CommitBuilder`と状態を表す型を加える．
+- `types.md`：`commit`の名前空間に`Commit`，`Signature`，`CommitBuilder`と状態を表す型を加える．`Repository`から`TreeEntry`と`Index`への依存を描く．
 
 ### 学ぶこと
 
-- Rust：ジェネリクスの型引数，ゼロサイズ型と`PhantomData`，型状態パターン(`impl CommitBuilder<NoTree, A>`のように状態ごとに`impl`を分ける)，`str::split_once`と`strip_prefix`，`std::env::var`，`SystemTime`
-- Git：commitオブジェクトの形式，作者とコミッター，時刻とタイムゾーンの表記
+- Rust：`Ordering`，`sort_by`，イテレータの`chain`と`cmp`による比較，スライスのパターンと`split_first`
+- Rust：ジェネリクスの型引数，ゼロサイズ型と`PhantomData`，型状態パターン(状態ごとに`impl`を分ける)
+- Rust：`str::split_once`と`strip_prefix`，`HashMap`，`SystemTime`
+- Git：インデックスからツリーを組み立てる手順，エントリーの並び順，commitオブジェクトの形式，作者とコミッター
 
 ### 既存テストへの影響
 
-- `cli::run`の引数に`Env`が加わるので，結合テストの呼び出しを変える．
+- `cli::run`の引数に環境変数が加わるので，結合テストの補助関数を変える．
 
 ## Iteration 7：参照，`commit`，`branch`
 
 ### 要件
 
-- 参照名を表す型`RefName`を作る．作るときに，Gitの参照名の規則の一部を検査する．
-  - `refs/`で始まる．空の要素，`.`で始まる要素，`..`，空白，`~^:?*[\`，末尾の`/`と`.lock`を含まない．
+- 参照名を表す型`RefName`を作る．`HEAD`か，`refs/`で始まる名前だけを受け付ける．
+  - 空の要素，`.`で始まる要素，`..`，空白，`~^:?*[\`，末尾の`/`と`.lock`を含む名前はエラーにする．
 - 参照はファイル`.git/<参照名>`に書く．中身は40桁のIDか，`ref: <参照名>`(シンボリック参照)である．
 - `rgit init`は`HEAD`に`ref: refs/heads/main`を書く．
-- 参照を更新するときは`<参照名>.lock`を作って書き込み，名前を変えて置き換える．`.lock`がすでにあればエラーにする．途中で失敗したら`.lock`を消す．
-- `rgit commit -m <message>`は，`write-tree`をし，`HEAD`が指すコミットを親にしてcommitを作り，`HEAD`が指すブランチを更新する．
+- 参照とインデックスを更新するときは`<ファイル名>.lock`を作って書き込み，名前を変えて置き換える．
+  - `.lock`がすでにあればエラーにする．途中で失敗したら`.lock`を消す．
+- `rgit commit -m <message>`は，インデックスから`write-tree`をし，`HEAD`が指すコミットを親にしてcommitを作り，`HEAD`が指すブランチを更新する．
   - 出力は`[<ブランチ名> <短縮ID>] <メッセージの1行目>`で，最初のコミットでは`(root-commit)`を付ける．
 - `rgit rev-parse <rev>`は，`HEAD`，ブランチ名，40桁または短縮形のIDを，40桁のIDにして出力する．
 - `rgit branch`はブランチの一覧を，今のブランチに`*`を付けて出力する．`rgit branch <name> [<rev>]`はブランチを作る．
@@ -443,9 +476,11 @@ $ rgit rev-parse topic
 
 ### モジュール
 
-- `refs`：`pub struct RefName(String)`，`impl TryFrom<String>`，`pub enum Ref { Direct(ObjectId), Symbolic(RefName) }`，`Repository`の参照を読み書きするメソッド
+- `refs`：`pub struct RefName(String)`，`impl TryFrom<&str>`，`pub enum Ref { Direct(ObjectId), Symbolic(RefName) }`
 - `lockfile`：`pub struct LockFile`，`LockFile::acquire`，`LockFile::commit(self)`，`impl Drop`
 - `revision`：`pub fn resolve(repo: &Repository, rev: &str) -> Result<ObjectId, Error>`
+- `repo`：参照を読み書きするメソッド，`Repository::commit`
+- `index`：`Index::save`は`LockFile`で書く(リファクタリング)．
 - `cli`：`commit`，`rev-parse`，`branch`のサブコマンド
 
 ### 図の更新
@@ -454,7 +489,8 @@ $ rgit rev-parse topic
 
 ### 学ぶこと
 
-- Rust：検査済みの値だけを持つニュータイプ(「検査せずに解析する」)，`TryFrom`による変換，`AsRef<str>`，`Drop`とRAII，`self`を受け取って値を消費するメソッド，`OpenOptions::create_new`，`fs::rename`
+- Rust：検査済みの値だけを持つニュータイプ，`TryFrom`による変換，`AsRef<str>`
+- Rust：`Drop`とRAII，`self`を受け取って値を消費するメソッド，`OpenOptions::create_new`，`fs::rename`
 - ツール：RustOwlで，`LockFile`が`commit`でムーブされたあとに使えないことを見る．
 - Git：参照，ブランチ，`HEAD`，シンボリック参照，ロックファイルによる更新
 
@@ -472,7 +508,7 @@ $ rgit rev-parse topic
 
 ```console
 $ rgit log
-6802a29 second
+85cd268 second
 6c04901 first
 $ rgit log -n 1 HEAD~1
 6c04901 first
@@ -491,58 +527,116 @@ $ rgit log -n 1 HEAD~1
 
 ### 学ぶこと
 
-- Rust：`Iterator`トレイトの実装と関連型`Item`，イテレータの遅延評価と`take`，参照を持つ構造体のライフタイム，`BinaryHeap`と`Reverse`，`HashSet`，`Hash`の導出，戻り値の`impl Iterator`
+- Rust：`Iterator`トレイトの実装と関連型`Item`，イテレータの遅延評価と`take`，参照を持つ構造体のライフタイム
+- Rust：`BinaryHeap`と`Reverse`，`HashSet`，`Hash`の導出
 - Git：コミットのグラフ(有向非巡回グラフ)，`log`の出力の順序，`~N`
 
-## Iteration 9：オブジェクトストアの抽象化と`switch`
+## Iteration 9：オブジェクトストアの抽象化と`status`
 
 ### 要件
 
-- オブジェクトの読み書きをトレイト`ObjectStore`にまとめる．
+- オブジェクトの読み書きをトレイト`ObjectStore`にまとめる(リファクタリング)．
   - ディスクのゆるいオブジェクトを読み書きする`LooseObjectStore`と，メモリーに持つ`MemoryObjectStore`の2つを実装する．
-  - `Repository`はオブジェクトストアを型引数に取る．既定は`LooseObjectStore`とする．
-  - ツリー，コミット，`log`の単体テストを，`MemoryObjectStore`で書き直す(リファクタリング)．
-- `rgit switch <branch>`は，作業ディレクトリをブランチのコミットのツリーにし，`HEAD`をそのブランチに向ける．
-  - 今のツリーにあって新しいツリーにないファイルは消す．新しいツリーのファイルを書く．
-  - 作業ディレクトリが`HEAD`のツリーと異なれば，`your local changes would be overwritten`のエラーにして何も変えない．作業ディレクトリのツリーは`MemoryObjectStore`に書いて計算する．
-- `rgit switch -c <branch> [<rev>]`は，ブランチを作ってから切り替える．
+  - ツリーを書く関数，`RevWalk`，`status`はオブジェクトストアを型引数に取る．単体テストは`MemoryObjectStore`で書く．
+- `rgit status`は，HEADのツリー，インデックス，作業ディレクトリを比べ，`<X><Y> <パス>`の形でパスの順に出力する．
+  - `X`はHEADとインデックスの違いで，追加は`A`，変更は`M`，削除は`D`，同じなら空白である．
+  - `Y`はインデックスと作業ディレクトリの違いで，変更は`M`，削除は`D`，同じなら空白である．作業ディレクトリのファイルはハッシュを計算して比べる．
+  - インデックスにないファイルは`?? <パス>`と出力する．
+- 結果は，本物の`git status --porcelain -uall`と一致する．
 
 ### 使用例
 
 ```console
-$ rgit switch -c topic HEAD~1
-Switched to a new branch 'topic'
-$ rgit switch main
-Switched to branch 'main'
+$ rgit status
+ M hello.txt
+?? todo.txt
+$ rgit add hello.txt
+$ rgit status
+M  hello.txt
+?? todo.txt
 ```
 
 ### モジュール
 
 - `store`：`pub trait ObjectStore`，`pub struct LooseObjectStore`，`pub struct MemoryObjectStore`
-- `repo`：`pub struct Repository<S: ObjectStore = LooseObjectStore>`
-- `checkout`：`pub fn switch(…)`，2つのツリーの差分
-- `cli`：`switch`のサブコマンド
+- `repo`：`Repository`はオブジェクトストアとして`LooseObjectStore`を持つ．
+- `tree`：`pub fn flatten_tree<S: ObjectStore>(store: &S, id: ObjectId) -> Result<BTreeMap<String, (Mode, ObjectId)>, Error>`
+- `status`：`pub enum Change`，`pub struct StatusEntry`，`pub fn status<S: ObjectStore>(…) -> Result<Vec<StatusEntry>, Error>`
+- `cli`：`status`のサブコマンド
 
 ### 図の更新
 
-- `types.md`：`store`の名前空間に`ObjectStore`と2つの実装を加え，実現の関係を描く．`Repository`が`ObjectStore`を型引数に取ることを描く．`checkout`の名前空間を加える．
+- `types.md`：`store`の名前空間に`ObjectStore`と2つの実装を加え，実現の関係を描く．`status`の名前空間を加える．
 
 ### 学ぶこと
 
-- Rust：トレイトの設計(何をトレイトにし，何を具体的な型に残すか)，トレイト境界とジェネリクス，既定の型引数，`dyn Trait`との比較(静的ディスパッチと動的ディスパッチ)，テストのための差し替え
-- Git：ツリーの差分，チェックアウト，作業ディレクトリの変更の検出
+- Rust：トレイトの設計(何をトレイトにし，何を具体的な型に残すか)，トレイト境界とジェネリクス，`?Sized`
+- Rust：`dyn Trait`との比較(静的ディスパッチと動的ディスパッチ)，テストのための差し替え
+- Rust：2つの`BTreeMap`の突き合わせ，`Option`のタプルによる`match`
+- Git：HEAD，インデックス，作業ディレクトリの3者の比較，追跡されていないファイル
 
 ### 既存テストへの影響
 
-- `Repository`を直接使っていた単体テストは，`MemoryObjectStore`を使う形に変わる．結合テストは変わらない．
+- `Repository`の書き込みのメソッドを使っていた単体テストは，`MemoryObjectStore`を使う形に変わる．結合テストは変わらない．
 
-## Iteration 10：`write-tree`の並列化
+## Iteration 10：`diff`
 
 ### 要件
 
-- `rgit write-tree`と`rgit commit`は，ファイルの読み込み，ハッシュの計算，blobの書き込みを複数のスレッドで行う．
+- 2つの列の最短の編集(一致，削除，挿入の列)を，Myersのアルゴリズムで求める．要素の型は比べられるものなら何でもよい．
+- `rgit diff`はインデックスと作業ディレクトリの，`rgit diff --cached`はHEADとインデックスの差分を，unified形式で出力する．
+  - ファイルごとに`diff --git a/<パス> b/<パス>`，`index <短縮ID>..<短縮ID> <モード>`，`--- a/<パス>`，`+++ b/<パス>`を出力する．
+  - 追加されたファイルは`new file mode <モード>`を，削除されたファイルは`deleted file mode <モード>`を出力し，ない側を`/dev/null`とする．
+  - 変更の前後3行を文脈として含め，近いハンクはまとめる．ハンクの見出しは`@@ -<開始>,<行数> +<開始>,<行数> @@`で，行数が1なら省略する．
+  - 末尾に改行のないファイルは，最後の行の後ろに`\ No newline at end of file`を出力する．
+  - NULを含むファイルは`Binary files a/<パス> and b/<パス> differ`と出力する．
+- 結果は，本物の`git diff`と一致する(ハンクの見出しの後ろの関数名を除く)．
+
+### 使用例
+
+```console
+$ rgit diff
+diff --git a/hello.txt b/hello.txt
+index ce01362..94954ab 100644
+--- a/hello.txt
++++ b/hello.txt
+@@ -1 +1,2 @@
+ hello
++world
+```
+
+```rust
+use rgit::diff::{diff, Edit};
+
+assert_eq!(
+    diff(&["a", "b", "c"], &["a", "c", "d"]),
+    vec![Edit::Equal(0, 0), Edit::Delete(1), Edit::Equal(2, 1), Edit::Insert(2)],
+);
+```
+
+### モジュール
+
+- `diff`：`pub enum Edit`，`pub fn diff<T: PartialEq>(a: &[T], b: &[T]) -> Vec<Edit>`，`pub struct Hunk`，`pub fn hunks(edits: &[Edit], context: usize) -> Vec<Hunk>`
+- `patch`：ファイルの差分をunified形式の文字列にする関数
+- `cli`：`diff`のサブコマンドと`--cached`
+
+### 図の更新
+
+- `types.md`：`diff`と`patch`の名前空間と，`Edit`，`Hunk`を加える．`patch`から`diff`と`status`への依存を描く．
+
+### 学ぶこと
+
+- Rust：トレイト境界を持つジェネリック関数，`enum`による操作の表現，`usize`と`isize`の変換と添字の計算
+- Rust：`str::split_inclusive`，`fmt::Write`と`write!`による文字列の組み立て，`windows`と`chunk_by`
+- Git：Myersの差分アルゴリズム(編集グラフと対角線)，unified形式，ハンクと文脈
+
+## Iteration 11：`add`と`status`の並列化
+
+### 要件
+
+- `rgit add`と`rgit status`は，ファイルの読み込みとハッシュの計算を複数のスレッドで行う．
   - スレッドの数は`--jobs <N>`で指定する．省略すれば`std::thread::available_parallelism`の値を使う．
-  - 結果のIDは，スレッドの数によらず同じである．
+  - 結果は，スレッドの数によらず同じである．
 - `ObjectStore`の書き込みは`&self`で行い，トレイトに`Send + Sync`を求める．
   - `MemoryObjectStore`は`Mutex`で中身を守る．
   - `LooseObjectStore`は一時ファイルに書いてから名前を変え，同じオブジェクトを同時に書いても壊れないようにする．
@@ -550,62 +644,29 @@ Switched to branch 'main'
 ### 使用例
 
 ```console
-$ rgit write-tree --jobs 8
-aae2b3618f4a481bc1bde056dae4b7617edb7e83
+$ rgit add --jobs 8 .
+$ rgit status --jobs 8
+A  hello.txt
+A  src/main.rs
 ```
 
 ### モジュール
 
 - `store`：`ObjectStore::write`を`&self`にする．`MemoryObjectStore`の中身を`Mutex<HashMap<…>>`にする．
-- `worktree`：処理を2段階に分ける．ファイルの一覧を作ってから，`std::thread::scope`でblobを並列に書く．
+- `parallel`：`pub fn map_parallel<T, R, F>(items: &[T], jobs: usize, f: F) -> Vec<R>`(`std::thread::scope`とチャネルを使う)
+- `repo`と`status`：ファイルごとの処理を`map_parallel`で行う．
 - `cli`：`--jobs`の引数
 
 ### 図の更新
 
-- `types.md`：`ObjectStore`に`Send + Sync`の境界を書き，`MemoryObjectStore`が`Mutex`を持つことを描く．
+- `types.md`：`ObjectStore`に`Send + Sync`の境界を書き，`MemoryObjectStore`が`Mutex`を持つことを書く．`parallel`の名前空間を加える．
 
 ### 学ぶこと
 
-- Rust：スレッド，`std::thread::scope`，`Send`と`Sync`，`available_parallelism`
-- Rust：`Mutex`と内部可変性，ロックの範囲，`RefCell`を持つ型を共有しようとしたときのコンパイルエラー
+- Rust：スレッド，`std::thread::scope`，クロージャのトレイト`Fn`と`Send`，`Send`と`Sync`，`available_parallelism`
+- Rust：`Mutex`と内部可変性，`RefCell`を持つ型を共有しようとしたときのコンパイルエラー，`mpsc`のチャネル，`thread::spawn`と`Arc`との比較
 - Git：オブジェクトの書き込みの原子性(一時ファイルと名前の変更)
 
 ### 既存テストへの影響
 
 - `ObjectStore::write`が`&self`になるので，`&mut`で呼んでいたテストを変える．
-
-## Iteration 11：並列の`fsck`
-
-### 要件
-
-- `rgit fsck [--jobs <N>]`は，リポジトリのすべてのゆるいオブジェクトを検査する．
-  - 次を確かめる：内容のハッシュがファイル名のIDと一致する．内容を解析できる．treeとcommitの参照先のオブジェクトがある．
-  - 問題があれば，ハッシュが合わないか解析できないオブジェクトを`corrupt <ID>`，参照されているのに存在しないオブジェクトを`missing <ID>`として，IDの順に出力し，終了コード1で終わる．問題がなければ`checked <N> objects`を出力する．
-- 検査は，`N`個のワーカースレッドがチャネルからIDを受け取って行う．
-- 結果は，スレッドの数によらず同じである．
-
-### 使用例
-
-```console
-$ rgit fsck --jobs 4
-checked 8 objects
-$ rm .git/objects/ce/013625030ba8dba906f756967f9e9ca394464a
-$ rgit fsck --jobs 4
-missing ce013625030ba8dba906f756967f9e9ca394464a
-```
-
-### モジュール
-
-- `fsck`：`pub fn fsck(repo: Arc<Repository>, jobs: usize) -> Result<Report, Error>`，`pub struct Report`，`pub enum Problem`
-- `store`：すべてのオブジェクトのIDを列挙するメソッド
-- `cli`：`fsck`のサブコマンド
-
-### 図の更新
-
-- `types.md`：`fsck`の名前空間と，`Report`，`Problem`を加える．
-
-### 学ぶこと
-
-- Rust：`thread::spawn`と`'static`の要求，`move`クロージャ，`Arc`，`JoinHandle::join`とスレッドのパニック，`scope`との比較
-- Rust：`mpsc`のチャネルと`Sender`の複製，`Arc<Mutex<Receiver>>`によるワーカーの共有，`AtomicUsize`と`Ordering`
-- Git：オブジェクトの検査，到達可能性

@@ -12,8 +12,8 @@
   - 所有権，借用，ライフタイムを理解し，コンパイラーのエラーを読んで直せる．
   - 不正な値を作れない型を，ニュータイプ，`enum`，型状態パターンで設計できる．
   - トレイトとジェネリクスで実装を差し替えられる設計にし，テストで使い分けられる．
-  - `std::thread`，`Arc`，`Mutex`，チャネルで処理を並列にし，`Send`と`Sync`のエラーを読める．
-  - Gitのオブジェクト，ツリー，コミット，参照の仕組みを説明できる．
+  - `std::thread::scope`，`Mutex`，チャネルで処理を並列にし，`Send`と`Sync`のエラーを読める．
+  - Gitのオブジェクト，ツリー，インデックス，コミット，参照の仕組みと，`status`と`diff`が何を比べているかを説明できる．
 - 教材は日本語で書く．文体は常体(である調)で，句読点は「，」と「．」を使う．`pnpm lint`(textlintとmarkdownlint)を通す．
 - 規模は12回のIteration(0〜11)で，1回あたり60〜120分とする．1つのIterationで扱うRustの話題は，1つか2つのまとまりに絞る．
 
@@ -26,7 +26,7 @@ Gitとの互換の方針は次のとおりである．
 
 - オブジェクトと参照の形式は本物のGitと同じにする．`rgit`が書いたリポジトリを`git`で読め，`git`が書いたリポジトリ(ゆるいオブジェクトだけのもの)を`rgit`で読める．
 - コマンドの名前，引数，出力の形式は，本物のGitの同じコマンドに合わせる．出力を簡単にしたコマンド(`commit`，`log`)は，ロードマップにその形式を書く．
-- インデックス，パックファイル，`packed-refs`，マージは扱わない．
+- 扱う範囲は，ゆるいオブジェクト，インデックスの版2，ブランチとシンボリック参照である．パックファイル，`packed-refs`，マージ，シンボリックリンクは対象外とする．
 
 ## 設計ドキュメント
 
@@ -50,7 +50,7 @@ Gitとの互換の方針は次のとおりである．
 
 - Rust 1.98.1をmiseで入れる(`mise.toml`)．エディションは2024とする．
 - テストは`cargo test`，整形は`cargo fmt`，リントは`cargo clippy -- -D warnings`を使う．
-- 本物の`git`を，結合テストでの照合と，教材の出力の取得に使う．Dockerfileで入れる．
+- 本物の`git`を，結合テストでの照合と，教材の出力の取得に使う．`git`と，バイト列を表示する`xxd`をDockerfileで入れる．
 - RustOwl(所有権とライフタイムの可視化)を，miseで入れる．VS Codeの拡張機能`cordx56.rustowl-vscode`を`devcontainer.json`に書く．Iteration 1，4，7のノートで使い方を説明する．
 - VS Codeの拡張機能は，ほかに`rust-lang.rust-analyzer`，`vadimcn.vscode-lldb`(デバッガー)，`tamasfe.even-better-toml`，`bierner.markdown-mermaid`を入れる．
 - Mermaidの構文検査と設計の照合には，Node(`mermaid`と`jsdom`)を使う．
@@ -126,6 +126,7 @@ RustにはREPLがないため，ノートの例は`cargo test`で動く小さな
 | 0 | `cargo init --lib --name rgit`，`cargo add`，`cargo build`，`cargo test`，`cargo test --lib`，`cargo test フィルター`，`cargo fmt`，`cargo clippy`，`src/main.rs`の追加と`cargo run` |
 | 1 | RustOwlの表示(カーソルを変数に合わせる) |
 | 2 | `cargo add`の`--features`と`--dev`，`cargo run -- 引数`，`cargo test --test 名前`，`cargo install --path .` |
+| 5 | `xxd`によるバイト列の表示 |
 
 ### ノート
 
