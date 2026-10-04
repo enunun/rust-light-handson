@@ -4,4 +4,6 @@
 [workspace]
 resolver = "3"
 members = ["iterations/*/solution"]
-exclude = []
+exclude = [
+  "iterations/iteration-00/exercise",
+]

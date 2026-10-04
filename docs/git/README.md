@@ -4,3 +4,4 @@
 
 | Iteration | 内容 |
 | --- | --- |
+| [0](iteration-00.md) | 内容アドレス，blobオブジェクトとヘッダー，SHA-1 |

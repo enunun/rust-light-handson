@@ -159,3 +159,7 @@ iterations/iteration-00/exercise/
 - Cargoのワークスペースの`exclude`はglobを受け付けない．演習ディレクトリを1つずつ書く．
 - 演習はどれもパッケージ名が`rgit`で版も同じなので，1つのターゲットディレクトリを共有すると，結合テストが別の演習のライブラリにリンクされる．演習ごとにターゲットディレクトリを分ける．
 - Gitはゆるいオブジェクトのファイルを読み取り専用(`0444`)で作る．テストでオブジェクトを壊すときは，先に書き込みの権限を付けるか，ファイルを消す．
+- Mermaidの`classDiagram`で，名前空間とクラスに同じ名前を付けると，構文検査は通るが描画が終わらなくなる．モジュールの公開関数を書くクラスは`<モジュール名>_mod`とし，`scripts/check-design.mjs`で重なりを検出する．
+- RustOwlは，`rustowl toolchain install`で解析用のツールチェーンを入れるまで動かない(`cargo not found`の警告のあと`Failed to create analyzer`になる)．Dockerfileで`mise install`のあとに実行する．
+- pnpm 12は，公開から1日たっていない版をロックファイルに入れると`ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`で失敗する．ロックファイルを作り直すときは，`pnpm-lock.yaml`を消して`pnpm install`を実行する．
+- 教材に載せるCargoの出力のパスは，Dev Containerと同じ`/workspaces/...`にする．Cargoはシンボリックリンクを解決した実際のパスを表示するので，リポジトリを`/workspaces`にマウントした環境で実行して出力を取る．
