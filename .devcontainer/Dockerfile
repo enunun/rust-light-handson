@@ -8,10 +8,13 @@ RUN apt-get update \
 	procps \
 	jq \
 	libatomic1 \
+	gcc \
+	libc6-dev \
+	xxd \
 	&& rm -rf /var/lib/apt/lists/*
 
-# ここにプロジェクト固有のシステムパッケージ・ツールチェーンのインストールを追加する
-# (例: ネイティブビルドのリンカ，画像/PDF変換ツール，各言語のランタイムなど)．
+# gccとlibc6-devはRustのリンカーに，xxdはインデックスのバイト列の表示に使う．
+# gitはベースイメージに含まれる．
 
 # ツール(rtk，lefthookなど)はmise.tomlのとおりにイメージへ入れる．
 # 版を固定したい場合は，先に`mise lock`でmise.lockを作り，
@@ -20,7 +23,8 @@ WORKDIR /tmp/mise-bootstrap
 COPY mise.toml ./
 RUN mise trust \
 	&& mise ls --current \
-	&& mise install --verbose
+	&& mise install --verbose \
+	&& mise exec -- rustowl toolchain install
 
 # rtkのhookを有効化する．
 RUN mkdir -p /root/.claude \
