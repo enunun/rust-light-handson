@@ -1,7 +1,7 @@
 # 型とモジュールの図
 
 `rgit`のモジュール，型，公開関数を示す．
-`cli`がコマンドラインの引数を解釈し，`repo`の`Repository`でオブジェクトを読み書きする．`tree`はtreeオブジェクトの内容を解析する．`index`はインデックスを読み書きし，`worktree`は作業ディレクトリのファイルを集める．`commit`はcommitオブジェクトを組み立て，解析し，直列化する．
+`cli`がコマンドラインの引数を解釈し，`repo`の`Repository`でオブジェクトを読み書きする．`tree`はtreeオブジェクトの内容を解析する．`index`はインデックスを読み書きし，`worktree`は作業ディレクトリのファイルを集める．`commit`はcommitオブジェクトを組み立て，解析し，直列化する．`refs`は参照を，`lockfile`はファイルの安全な置き換えを，`revision`はリビジョンの指定の解決を受け持つ．`revwalk`はコミットのグラフをたどる．`store`はオブジェクトの読み書きをトレイトにまとめ，`status`はHEAD，インデックス，作業ディレクトリを比べる．
 
 ```mermaid
 classDiagram
@@ -22,7 +22,12 @@ classDiagram
             LsTree: tree String
             Add: paths Vec~PathBuf~
             LsFiles: stage bool
+            Status
             WriteTree
+            Commit: message String
+            RevParse: rev String
+            Branch: name Option~String~, start Option~String~
+            Log: max_count Option~usize~, rev Option~String~
             CommitTree: tree String, parents Vec~String~, message String
         }
         class CatFileMode {
@@ -37,16 +42,22 @@ classDiagram
             <<struct>>
             -work_dir: PathBuf
             -git_dir: PathBuf
+            -objects: LooseObjectStore
             +init(dir: &Path) Result~Repository, Error~
             +discover(start: &Path) Result~Repository, Error~
+            +work_dir() &Path
             +git_dir() &Path
             +index_path() PathBuf
-            +add(cwd: &Path, pathspecs: &[PathBuf]) Result
-            +write_blob(data: &[u8]) Result~ObjectId, Error~
-            +write_object(kind: ObjectKind, data: &[u8]) Result~ObjectId, Error~
-            +write_tree(index: &Index) Result~ObjectId, Error~
-            +read_object(id: ObjectId) Result
+            +objects() &LooseObjectStore
+            +objects_mut() &mut LooseObjectStore
+            +add(&mut self, cwd: &Path, pathspecs: &[PathBuf]) Result
             +resolve_prefix(prefix: &str) Result~ObjectId, Error~
+            +read_ref(name: &RefName) Result
+            +final_ref_name(name: &RefName) Result~RefName, Error~
+            +resolve_ref(name: &RefName) Result
+            +update_ref(name: &RefName, id: ObjectId) Result
+            +branches() Result
+            +commit(&mut self, commit: Commit) Result~ObjectId, Error~
         }
     }
     namespace error {
@@ -55,6 +66,7 @@ classDiagram
             NotARepository
             ObjectNotFound: String
             AmbiguousObject: String
+            NotACommit: String
             NotATree
             CorruptObject: &'static str
             CorruptIndex: &'static str
@@ -62,6 +74,10 @@ classDiagram
             OutsideRepository: String
             MissingVariable: String
             InvalidDate: String
+            InvalidRefName: String
+            InvalidBranchName: String
+            BranchExists: String
+            Locked: String
             Io: io::Error
             Usage: clap::Error
             +impl Display
@@ -90,6 +106,8 @@ classDiagram
             +parse_tree(data: &[u8]) Result
             +compare_entries(a: &TreeEntry, b: &TreeEntry) Ordering
             +tree_bytes(entries: Vec~TreeEntry~) Vec~u8~
+            +write_tree(store: &mut S, index: &Index) Result~ObjectId, Error~
+            +flatten_tree(store: &S, id: ObjectId) Result
         }
         class Mode {
             <<enumeration>>
@@ -116,6 +134,7 @@ classDiagram
         class commit_mod {
             <<module>>
             +parse_offset(text: &str) Option~i32~
+            +read_commit(store: &S, id: ObjectId) Result~Commit, Error~
         }
         class Signature {
             <<struct>>
@@ -153,6 +172,89 @@ classDiagram
             +parent(parent: ObjectId) CommitBuilder
             +message(message: &str) CommitBuilder
             +build() Commit
+        }
+    }
+    namespace refs {
+        class RefName {
+            <<struct>>
+            -0: String
+            +head() RefName
+            +branch(name: &str) Result~RefName, Error~
+            +as_str() &str
+            +branch_name() Option~&str~
+            +impl TryFrom~&str~
+            +impl Display
+        }
+        class Ref {
+            <<enumeration>>
+            Direct: ObjectId
+            Symbolic: RefName
+            +parse(text: &str) Result~Ref, Error~
+        }
+    }
+    namespace lockfile {
+        class LockFile {
+            <<struct>>
+            -path: PathBuf
+            -lock_path: PathBuf
+            -file: File
+            -committed: bool
+            +acquire(path: &Path) Result~LockFile, Error~
+            +write_all(data: &[u8]) Result
+            +commit(self) Result
+            +impl Drop
+        }
+    }
+    namespace revision {
+        class revision_mod {
+            <<module>>
+            +resolve(repo: &Repository, rev: &str) Result~ObjectId, Error~
+        }
+    }
+    namespace revwalk {
+        class RevWalk~'s, S~ {
+            <<struct>>
+            -store: &'s S
+            -queue: BinaryHeap
+            -seen: HashSet~ObjectId~
+            +new(store: &'s S, start: ObjectId) RevWalk
+            -push_parents(commit: &Commit) Result
+            +impl Iterator
+        }
+    }
+    namespace store {
+        class ObjectStore {
+            <<trait>>
+            +read(id: ObjectId) Result
+            +write(&mut self, kind: ObjectKind, data: &[u8]) Result~ObjectId, Error~
+            +find(prefix: &str) Result
+        }
+        class LooseObjectStore {
+            <<struct>>
+            -objects_dir: PathBuf
+            +new(objects_dir: &Path) LooseObjectStore
+        }
+        class MemoryObjectStore {
+            <<struct>>
+            -objects: HashMap
+        }
+    }
+    namespace status {
+        class status_mod {
+            <<module>>
+            +status(store: &S, head: Option~ObjectId~, index: &Index, work_dir: &Path) Result
+        }
+        class Change {
+            <<enumeration>>
+            Added
+            Modified
+            Deleted
+        }
+        class StatusEntry {
+            <<enumeration>>
+            Changed: path String, staged Option~Change~, unstaged Option~Change~
+            Untracked: String
+            +impl Display
         }
     }
     namespace index {
@@ -199,6 +301,7 @@ classDiagram
             <<module>>
             +list_files(work_dir: &Path, dir: &Path) Result
             +relative_path(work_dir: &Path, path: &Path) Option~String~
+            +file_mode(metadata: &Metadata) Mode
         }
     }
     namespace oid {
@@ -210,6 +313,8 @@ classDiagram
             +short() String
             +impl Display
             +impl FromStr
+            +impl Ord
+            +impl Hash
         }
         class ParseObjectIdError {
             <<enumeration>>
@@ -223,15 +328,37 @@ classDiagram
     cli_mod ..> Repository
     cli_mod ..> Error
     cli_mod ..> object_mod
-    Repository ..> object_mod
     cli_mod ..> tree_mod
     tree_mod ..> TreeEntry
     TreeEntry *-- Mode
     TreeEntry *-- ObjectId
     Mode ..> ObjectKind
     Repository ..> ObjectId
-    Repository ..> tree_mod
-    Repository ..> TreeEntry
+    Repository ..> Ref
+    Repository ..> RefName
+    Repository ..> LockFile
+    Repository ..> Commit
+    Index ..> LockFile
+    Ref *-- RefName
+    Ref *-- ObjectId
+    revision_mod ..> Repository
+    revision_mod ..> RefName
+    cli_mod ..> revision_mod
+    cli_mod ..> RevWalk
+    RevWalk --> ObjectStore
+    LooseObjectStore ..|> ObjectStore
+    MemoryObjectStore ..|> ObjectStore
+    Repository *-- LooseObjectStore
+    tree_mod ..> ObjectStore
+    commit_mod ..> ObjectStore
+    status_mod ..> ObjectStore
+    status_mod ..> StatusEntry
+    status_mod ..> tree_mod
+    status_mod ..> worktree_mod
+    StatusEntry *-- Change
+    cli_mod ..> status_mod
+    RevWalk ..> Commit
+    cli_mod ..> RefName
     cli_mod ..> Commit
     cli_mod ..> Signature
     cli_mod ..> commit_mod
@@ -263,11 +390,20 @@ classDiagram
 - `Index::parse`は，`Reader`でバイト列を先頭から読む．
 - `Commit::builder`は`CommitBuilder<Missing, Missing, Missing>`を返す．`tree`，`author`，`committer`は，それぞれ型引数の`T`，`A`，`C`を`ObjectId`，`Signature`，`Signature`に変えた`CommitBuilder`を返す．`build`は`CommitBuilder<ObjectId, Signature, Signature>`にだけある．
 - `cli`は，非公開の関数`signature_from_env`と`parse_date`で，環境変数から署名を作る．
-- `Repository::write_tree`は，非公開のメソッド`write_subtree`を再帰で呼び，ディレクトリごとにtreeを書く．
+- `Repository`の`read_ref`の戻り値は`Result<Option<Ref>, Error>`，`resolve_ref`の戻り値は`Result<Option<ObjectId>, Error>`である．
+- `Repository`の`update_ref`の戻り値は`Result<(), Error>`，`branches`の戻り値は`Result<Vec<String>, Error>`である．
+- `LockFile::commit`は`self`を受け取るので，呼んだあとのロックは使えない．`commit`せずに捨てると，`Drop`が`.lock`のファイルを消す．
+- `RevWalk`の`queue`は`BinaryHeap<(i64, ObjectId)>`で，コミッターの時刻とIDの組を持つ．
+- `RevWalk`の`Iterator`の`Item`は`Result<(ObjectId, Commit), Error>`である．コミッターの時刻の新しい順に返し，同じコミットは1回だけ返す．
+- `RefName`は，非公開の関数`is_valid_ref_path`で参照名の規則を調べる．
+- `write_tree`は，非公開の関数`write_subtree`を再帰で呼び，ディレクトリごとにtreeを書く．`flatten_tree`は，非公開の関数`collect_tree`を再帰で呼ぶ．
+- `write_tree`，`flatten_tree`，`read_commit`，`status`，`RevWalk`の型引数`S`は`ObjectStore + ?Sized`である．`flatten_tree`の戻り値は`Result<BTreeMap<String, (Mode, ObjectId)>, Error>`，`status`の戻り値は`Result<Vec<StatusEntry>, Error>`である．
+- `ObjectStore`の`read`の戻り値は`Result<(ObjectKind, Vec<u8>), Error>`，`find`の戻り値は`Result<Vec<ObjectId>, Error>`である．`MemoryObjectStore`の`objects`は`HashMap<ObjectId, (ObjectKind, Vec<u8>)>`である．
+- `LooseObjectStore`は非公開のメソッド`object_path`で，IDからオブジェクトのファイルのパスを作る．`status`は非公開の関数`compare`と`work_tree_files`を使う．
 - `parse_tree`の戻り値は`Result<Vec<TreeEntry<'_>>, Error>`である．
 - `TreeEntry`の`name`は，`parse_tree`に渡したバイト列の一部を借りている．`TreeEntry`は，そのバイト列より長く使えない．
 - `cli`は非公開の関数`write_tree_entries`で，treeのエントリーを1行ずつ書く．`cat-file -p`と`ls-tree`の両方が使う．
-- `Repository`は非公開のメソッド`object_path`で，IDからオブジェクトのファイルのパスを作る．
 - zlibの圧縮には，外部のクレート`flate2`の`ZlibEncoder`を使う．
+- `lib.rs`は`LooseObjectStore`，`MemoryObjectStore`，`ObjectStore`も公開する．
 - `lib.rs`は`cli`を公開モジュールにし，`Commit`，`Missing`，`Signature`，`Error`，`hash_blob`，`ObjectId`，`ParseObjectIdError`を`pub use`で公開する．
 - `main.rs`は`cli::run`を呼ぶ．`Error::Usage`ならclapのメッセージを出して終了コード2で，ほかのエラーなら`fatal: <メッセージ>`を出して終了コード128で終わる．

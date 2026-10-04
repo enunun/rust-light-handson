@@ -13,3 +13,4 @@
 | [6](iteration-06.md) | インデックスからtreeを作る手順，エントリーの並び順，commitオブジェクト，署名と時刻，作者とコミッターの環境変数 |
 | [7](iteration-07.md) | 参照，参照名の規則，`HEAD`とシンボリック参照，`git commit`の手順，ロックファイル |
 | [8](iteration-08.md) | コミットのグラフ，マージ，`git log`の順序，`~N`による指定 |
+| [9](iteration-09.md) | HEAD，インデックス，作業ディレクトリ，`git status --porcelain`の形，ファイルの状態による省略 |

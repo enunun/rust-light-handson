@@ -551,10 +551,10 @@ $ rgit log -n 1 HEAD~1
 - オブジェクトの読み書きをトレイト`ObjectStore`にまとめる(リファクタリング)．
   - ディスクのゆるいオブジェクトを読み書きする`LooseObjectStore`と，メモリーに持つ`MemoryObjectStore`の2つを実装する．
   - ツリーを書く関数，`RevWalk`，`status`はオブジェクトストアを型引数に取る．単体テストは`MemoryObjectStore`で書く．
-- `rgit status`は，HEADのツリー，インデックス，作業ディレクトリを比べ，`<X><Y> <パス>`の形でパスの順に出力する．
+- `rgit status`は，HEADのツリー，インデックス，作業ディレクトリを比べ，変更のあるファイルを`<X><Y> <パス>`の形でパスの順に出力する．
   - `X`はHEADとインデックスの違いで，追加は`A`，変更は`M`，削除は`D`，同じなら空白である．
   - `Y`はインデックスと作業ディレクトリの違いで，変更は`M`，削除は`D`，同じなら空白である．作業ディレクトリのファイルはハッシュを計算して比べる．
-  - インデックスにないファイルは`?? <パス>`と出力する．
+  - そのあとに，インデックスにないファイルを`?? <パス>`の形でパスの順に出力する．
 - 結果は，本物の`git status --porcelain -uall`と一致する．
 
 ### 使用例
@@ -571,10 +571,13 @@ M  hello.txt
 
 ### モジュール
 
-- `store`：`pub trait ObjectStore`，`pub struct LooseObjectStore`，`pub struct MemoryObjectStore`
-- `repo`：`Repository`はオブジェクトストアとして`LooseObjectStore`を持つ．
-- `tree`：`pub fn flatten_tree<S: ObjectStore>(store: &S, id: ObjectId) -> Result<BTreeMap<String, (Mode, ObjectId)>, Error>`
-- `status`：`pub enum Change`，`pub struct StatusEntry`，`pub fn status<S: ObjectStore>(…) -> Result<Vec<StatusEntry>, Error>`
+- `store`：`pub trait ObjectStore`(`read`，`write(&mut self, …)`，`find`)，`pub struct LooseObjectStore`，`pub struct MemoryObjectStore`
+- `repo`：`Repository`はオブジェクトストアとして`LooseObjectStore`を持ち，`objects`と`objects_mut`で貸す．オブジェクトを読み書きするメソッドは`store`に移す．
+- `tree`：`Repository::write_tree`を，オブジェクトストアを受け取る`pub fn write_tree<S: ObjectStore + ?Sized>(store: &mut S, index: &Index)`に移す．
+- `tree`：`pub fn flatten_tree<S: ObjectStore + ?Sized>(store: &S, id: ObjectId) -> Result<BTreeMap<String, (Mode, ObjectId)>, Error>`
+- `commit`：`Repository::read_commit`を，オブジェクトストアを受け取る`pub fn read_commit`に移す．`RevWalk`は`RevWalk<'s, S>`になる．
+- `status`：`pub enum Change`，`pub enum StatusEntry`，`pub fn status<S: ObjectStore + ?Sized>(…) -> Result<Vec<StatusEntry>, Error>`
+- `worktree`：ファイルのモードを決める`pub fn file_mode`
 - `cli`：`status`のサブコマンド
 
 ### 図の更新
@@ -585,12 +588,12 @@ M  hello.txt
 
 - Rust：トレイトの設計(何をトレイトにし，何を具体的な型に残すか)，トレイト境界とジェネリクス，`?Sized`
 - Rust：`dyn Trait`との比較(静的ディスパッチと動的ディスパッチ)，テストのための差し替え
-- Rust：2つの`BTreeMap`の突き合わせ，`Option`のタプルによる`match`
+- Rust：2つの`BTreeMap`の突き合わせと`BTreeSet`，`Option`のタプルによる`match`，`map_or`，テストの準備をまとめる構造体
 - Git：HEAD，インデックス，作業ディレクトリの3者の比較，追跡されていないファイル
 
 ### 既存テストへの影響
 
-- `Repository`の書き込みのメソッドを使っていた単体テストは，`MemoryObjectStore`を使う形に変わる．結合テストは変わらない．
+- `Repository`のオブジェクトの読み書きのテストは，`store`のテストに移る．ツリーとコミットの履歴の単体テストは，`MemoryObjectStore`を使う形に変わる．結合テストは変わらない．
 
 ## Iteration 10：`diff`
 

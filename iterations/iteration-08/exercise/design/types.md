@@ -334,5 +334,5 @@ classDiagram
 - `cli`は非公開の関数`write_tree_entries`で，treeのエントリーを1行ずつ書く．`cat-file -p`と`ls-tree`の両方が使う．
 - `Repository`は非公開のメソッド`object_path`で，IDからオブジェクトのファイルのパスを作る．
 - zlibの圧縮には，外部のクレート`flate2`の`ZlibEncoder`を使う．
-- `lib.rs`は`cli`を公開モジュールにし，`Error`，`hash_blob`，`ObjectId`，`ParseObjectIdError`を`pub use`で公開する．
+- `lib.rs`は`cli`を公開モジュールにし，`Commit`，`Missing`，`Signature`，`Error`，`hash_blob`，`ObjectId`，`ParseObjectIdError`を`pub use`で公開する．
 - `main.rs`は`cli::run`を呼ぶ．`Error::Usage`ならclapのメッセージを出して終了コード2で，ほかのエラーなら`fatal: <メッセージ>`を出して終了コード128で終わる．

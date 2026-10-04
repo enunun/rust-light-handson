@@ -13,3 +13,4 @@
 | [6](iteration-06.md) | `Ordering`と`sort_by`，イテレーターの`chain`と`cmp`，`then_some`，`while let`，値を受け取る関数，ジェネリクス，ゼロサイズ型，型状態パターン，`PhantomData`，`HashMap`と環境変数，`split_once`と`split_at_checked`，`SystemTime` |
 | [7](iteration-07.md) | 検査済みの値だけを持つ型，`str::contains`とクロージャ，`Drop`とRAII，値を消費するメソッド，RustOwlでムーブを見る，`OpenOptions::create_new`と`fs::rename`，`OsString`，`as_deref`，`match`のフィールドのパターン |
 | [8](iteration-08.md) | `Iterator`の実装と関連型，`Result`を要素にするイテレーター，遅延評価と`take`，`by_ref`，参照を持つ構造体，`BinaryHeap`，`HashSet`，`Ord`と`Hash`の導出，`let … else` |
+| [9](iteration-09.md) | トレイトの定義と実装，何をトレイトにするか，トレイト境界，`?Sized`，トレイトオブジェクトと`Box<dyn Trait>`，静的ディスパッチと動的ディスパッチ，テストのための差し替え，`BTreeSet`，`Option`の組の`match`，`map_or` |
