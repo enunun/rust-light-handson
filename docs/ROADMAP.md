@@ -469,6 +469,8 @@ let commit = Commit::builder()
   - 出力は`[<ブランチ名> <短縮ID>] <メッセージの1行目>`で，最初のコミットでは`(root-commit)`を付ける．
 - `rgit rev-parse <rev>`は，`HEAD`，ブランチ名，40桁または短縮形のIDを，40桁のIDにして出力する．
 - `rgit branch`はブランチの一覧を，今のブランチに`*`を付けて出力する．`rgit branch <name> [<rev>]`はブランチを作る．
+  - 不正なブランチ名は`'<name>' is not a valid branch name`，すでにあるブランチは`a branch named '<name>' already exists`のエラーにする．
+- `cat-file`，`ls-tree`，`commit-tree`のオブジェクトの指定にも，`rev-parse`と同じ形を使える．
 
 ### 使用例
 
@@ -485,10 +487,10 @@ $ rgit rev-parse topic
 
 ### モジュール
 
-- `refs`：`pub struct RefName(String)`，`impl TryFrom<&str>`，`pub enum Ref { Direct(ObjectId), Symbolic(RefName) }`
-- `lockfile`：`pub struct LockFile`，`LockFile::acquire`，`LockFile::commit(self)`，`impl Drop`
+- `refs`：`pub struct RefName(String)`，`impl TryFrom<&str>`，`RefName::branch`，`pub enum Ref { Direct(ObjectId), Symbolic(RefName) }`
+- `lockfile`：`pub struct LockFile`，`LockFile::acquire`，`LockFile::write_all`，`LockFile::commit(self)`，`impl Drop`
 - `revision`：`pub fn resolve(repo: &Repository, rev: &str) -> Result<ObjectId, Error>`
-- `repo`：参照を読み書きするメソッド，`Repository::commit`
+- `repo`：参照を読み書きするメソッド(`read_ref`，`final_ref_name`，`resolve_ref`，`update_ref`，`branches`)，`Repository::commit`
 - `index`：`Index::save`は`LockFile`で書く(リファクタリング)．
 - `cli`：`commit`，`rev-parse`，`branch`のサブコマンド
 
@@ -498,8 +500,8 @@ $ rgit rev-parse topic
 
 ### 学ぶこと
 
-- Rust：検査済みの値だけを持つニュータイプ，`TryFrom`による変換，`AsRef<str>`
-- Rust：`Drop`とRAII，`self`を受け取って値を消費するメソッド，`OpenOptions::create_new`，`fs::rename`
+- Rust：検査済みの値だけを持つニュータイプ，`TryFrom`による変換，`Display`，`str::contains`にクロージャを渡す検査
+- Rust：`Drop`とRAII，`self`を受け取って値を消費するメソッド，`OpenOptions::create_new`，`fs::rename`，`Option::as_deref`
 - ツール：RustOwlで，`LockFile`が`commit`でムーブされたあとに使えないことを見る．
 - Git：参照，ブランチ，`HEAD`，シンボリック参照，ロックファイルによる更新
 
