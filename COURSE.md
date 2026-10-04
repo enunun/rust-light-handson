@@ -91,7 +91,7 @@ Iteration番号は，ディレクトリ名とファイル名に2桁(`iteration-0
   - Cargoの`exclude`はglobを使えないため，Iterationを作るたびに，ルートの`Cargo.toml`の`exclude`に`iterations/iteration-NN/exercise`を加える．
 - 演習の`Cargo.toml`は，1つ前の模範解答の`Cargo.toml`からパッケージ名だけを変えたものとする．そのため模範解答の`Cargo.toml`はワークスペースから設定を継承せず，依存の版を直接書く．
 - バイナリ名はパッケージ名になるため，演習と模範解答で異なる．結合テストはバイナリを起動せず，`rgit::cli::run`を呼ぶ．`main.rs`は`cli::run`を呼んでエラーを表示するだけにする．
-- 結合テストは，`tempfile::TempDir`にリポジトリを作り，`std::process::Command`で本物の`git`も実行して結果を比べる．`git`には`GIT_CONFIG_NOSYSTEM=1`と`HOME`を一時ディレクトリにした環境を渡し，利用者の設定の影響を受けないようにする．
+- 結合テストは，`tempfile::TempDir`にリポジトリを作り，`std::process::Command`で本物の`git`も実行して結果を比べる．`git`には`GIT_CONFIG_NOSYSTEM=1`と`GIT_CONFIG_GLOBAL=/dev/null`を渡し，利用者の設定の影響を受けないようにする．
 
 ### コマンド
 
@@ -104,7 +104,7 @@ Iteration番号は，ディレクトリ名とファイル名に2桁(`iteration-0
 | 整形とリント | `cargo fmt`，`cargo clippy` | `mise run fmt`，`mise run lint` |
 | リポジトリ全体の検査 | なし | `mise run check` |
 
-使用例のように，別のディレクトリで`rgit`を試すときは，`cargo install --path .`で`rgit`をインストールする(Iteration 2で示す)．
+使用例のように，別のディレクトリで`rgit`を試すときは，`alias rgit="cargo run -q --manifest-path $PWD/Cargo.toml --"`で別名を作る(Iteration 2で示す)．別名は，`exercise/`の最新のコードをビルドして実行する．
 RustにはREPLがないため，ノートの例は`cargo test`で動く小さなテストか，`examples/`で試せるプログラムとして書く．
 
 `mise run check`は次を実行する．
@@ -122,7 +122,7 @@ RustにはREPLがないため，ノートの例は`cargo test`で動く小さな
 | --- | --- |
 | 0 | `cargo init --lib --name rgit`，`cargo add`，`cargo build`，`cargo test`，`cargo test --lib`，`cargo test フィルター`，`cargo fmt`，`cargo clippy`，`src/main.rs`の追加と`cargo run` |
 | 1 | RustOwlの表示(カーソルを変数に合わせる) |
-| 2 | `cargo add`の`--features`と`--dev`，`cargo run -- 引数`，`cargo test --test 名前`，`cargo install --path .` |
+| 2 | `cargo add`の`--features`と`--dev`，`cargo run -- 引数`，`cargo test --test 名前`，`cargo run`の別名 |
 | 5 | `xxd`によるバイト列の表示 |
 
 ### ノート

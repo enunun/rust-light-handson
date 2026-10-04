@@ -212,10 +212,11 @@ assert_eq!("ce01".parse::<ObjectId>(), Err(ParseObjectIdError::InvalidLength(4))
 ### 要件
 
 - `rgit init [<dir>]`は，`<dir>`(省略時はカレントディレクトリ)に`.git`，`.git/objects`，`.git/refs/heads`を作る．
+  - `.git/HEAD`に`ref: refs/heads/main`と書く．本物の`git`は，`HEAD`のないディレクトリをリポジトリと認めない．
   - 作り終えたら`Initialized empty Git repository in <.gitの絶対パス>/`を出力する．
 - `rgit hash-object [-w] <file>`は，ファイルのblobとしてのIDを出力する．
   - `-w`があれば，オブジェクトをリポジトリに書き込む．書き込み先は`.git/objects/<IDの先頭2桁>/<残りの38桁>`で，内容はヘッダーと内容をzlibで圧縮したものである．
-  - リポジトリは，カレントディレクトリから親へ順に`.git`を探して見つける．見つからなければ`not a git repository`のエラーにする．
+  - `-w`のときは，カレントディレクトリから親へ順に`.git`を探してリポジトリを見つける．見つからなければ`not a git repository (or any of the parent directories): .git`のエラーにする．`-w`がなければ，リポジトリの外でも動く．
 - エラーは標準エラー出力に`fatal: <メッセージ>`と出力し，終了コード128で終わる．引数の誤りはclapのメッセージを出力し，終了コード2で終わる．
 - 本物の`git`は，`rgit`が書いたオブジェクトを読める．
 
@@ -234,7 +235,7 @@ hello
 ### モジュール
 
 - `cli`：clapのderiveによる`struct Cli`と`enum Command`，`pub fn run(args: &[&str], cwd: &Path, out: &mut impl Write) -> Result<(), Error>`
-- `repo`：`pub struct Repository`，`Repository::init`，`Repository::discover`，`Repository::write_blob`
+- `repo`：`.git`の場所を持つ`pub struct Repository`，`Repository::init`，`Repository::discover`，`Repository::write_blob`
 - `error`：thiserrorによる`pub enum Error`
 - `object`：ヘッダーと内容を連結したバイト列を作る`blob_bytes`を加え，`hash_blob`はそのハッシュを計算する(リファクタリング)．
 - `main.rs`：`cli::run`を呼び，エラーを出力する．
@@ -247,7 +248,7 @@ hello
 
 - Rust：属性とderiveマクロ，clapのderive(`Parser`，`Subcommand`)，`Path`と`PathBuf`，`Path::ancestors`，`std::fs`
 - Rust：`io::Write`トレイト，引数の`impl Write`，`Vec<u8>`への書き込み，thiserrorによるエラー型，`#[from]`と`?`による変換
-- Rust：`std::process::exit`，`std::process::Command`を使うテスト
+- Rust：`if let`と`matches!`，イテレーターの`skip`，`map`，`collect`の基本，`std::process::exit`，`std::process::Command`を使うテスト
 - Git：`.git`ディレクトリの構成，ゆるいオブジェクト，zlib
 
 ### 受講者が行うツール操作
@@ -256,7 +257,7 @@ hello
 - `cargo add --dev tempfile`で，テストだけで使う依存を追加する．
 - `cargo run -- init`のように，`--`の後ろにプログラムの引数を渡す．
 - `cargo test --test 名前`で，1つの結合テストのファイルだけを実行する．
-- `cargo install --path .`で`rgit`をインストールし，別のディレクトリで試す．
+- `cargo run`の`--manifest-path`を使う別名`rgit`を作り，別のディレクトリで試す．
 
 ### 既存テストへの影響
 
@@ -333,7 +334,7 @@ $ rgit ls-tree aae2b36
 ### 学ぶこと
 
 - Rust：ライフタイム注釈`'a`，参照を持つ構造体，元のバイト列を借用したまま解析する設計と，所有するデータに写す設計の比較
-- Rust：`TryFrom`と`TryInto`，スライスから配列への変換，`matches!`
+- Rust：`TryFrom`と`TryInto`，スライスから配列への変換
 - ツール：RustOwlで，`TreeEntry`の名前が元のバイト列を借用している範囲を見る．
 - Git：treeオブジェクトの形式，ファイルのモード
 
@@ -453,7 +454,6 @@ let commit = Commit::builder()
 - 参照名を表す型`RefName`を作る．`HEAD`か，`refs/`で始まる名前だけを受け付ける．
   - 空の要素，`.`で始まる要素，`..`，空白，`~^:?*[\`，末尾の`/`と`.lock`を含む名前はエラーにする．
 - 参照はファイル`.git/<参照名>`に書く．中身は40桁のIDか，`ref: <参照名>`(シンボリック参照)である．
-- `rgit init`は`HEAD`に`ref: refs/heads/main`を書く．
 - 参照とインデックスを更新するときは`<ファイル名>.lock`を作って書き込み，名前を変えて置き換える．
   - `.lock`がすでにあればエラーにする．途中で失敗したら`.lock`を消す．
 - `rgit commit -m <message>`は，インデックスから`write-tree`をし，`HEAD`が指すコミットを親にしてcommitを作り，`HEAD`が指すブランチを更新する．
