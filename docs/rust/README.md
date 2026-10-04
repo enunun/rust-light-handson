@@ -12,3 +12,4 @@
 | [5](iteration-05.md) | `to_be_bytes`と`from_be_bytes`，`as`による整数の変換，バイト列の組み立て，読み進める型と`impl<'a>`，`BTreeMap`，`Default`と更新構文，`MetadataExt`と`PermissionsExt`，再帰と`collect`による`Result`の集約，クロージャと`filter`，`cloned` |
 | [6](iteration-06.md) | `Ordering`と`sort_by`，イテレーターの`chain`と`cmp`，`then_some`，`while let`，値を受け取る関数，ジェネリクス，ゼロサイズ型，型状態パターン，`PhantomData`，`HashMap`と環境変数，`split_once`と`split_at_checked`，`SystemTime` |
 | [7](iteration-07.md) | 検査済みの値だけを持つ型，`str::contains`とクロージャ，`Drop`とRAII，値を消費するメソッド，RustOwlでムーブを見る，`OpenOptions::create_new`と`fs::rename`，`OsString`，`as_deref`，`match`のフィールドのパターン |
+| [8](iteration-08.md) | `Iterator`の実装と関連型，`Result`を要素にするイテレーター，遅延評価と`take`，`by_ref`，参照を持つ構造体，`BinaryHeap`，`HashSet`，`Ord`と`Hash`の導出，`let … else` |

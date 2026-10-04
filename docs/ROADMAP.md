@@ -527,9 +527,11 @@ $ rgit log -n 1 HEAD~1
 
 ### モジュール
 
-- `revwalk`：`pub struct RevWalk<'r> { repo: &'r Repository, queue: BinaryHeap<…>, seen: HashSet<ObjectId> }`
+- `revwalk`：`pub struct RevWalk<'r> { repo: &'r Repository, queue: BinaryHeap<(i64, ObjectId)>, seen: HashSet<ObjectId> }`，`RevWalk::new`
 - `revwalk`：`impl Iterator for RevWalk<'_>`(`Item = Result<(ObjectId, Commit), Error>`)
 - `revision`：`~N`を解釈する．
+- `repo`：commitオブジェクトを読む`Repository::read_commit`
+- `oid`：`ObjectId`に`PartialOrd`，`Ord`，`Hash`を導出する．
 - `cli`：`log`のサブコマンド
 
 ### 図の更新
@@ -539,7 +541,7 @@ $ rgit log -n 1 HEAD~1
 ### 学ぶこと
 
 - Rust：`Iterator`トレイトの実装と関連型`Item`，イテレーターの遅延評価と`take`，参照を持つ構造体のライフタイム
-- Rust：`BinaryHeap`と`Reverse`，`HashSet`，`Hash`の導出
+- Rust：`BinaryHeap`とタプルの順序，`HashSet`，`Ord`と`Hash`の導出，`let … else`
 - Git：コミットのグラフ(有向非巡回グラフ)，`log`の出力の順序，`~N`
 
 ## Iteration 9：オブジェクトストアの抽象化と`status`
