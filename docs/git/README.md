@@ -8,3 +8,4 @@
 | [1](iteration-01.md) | 20バイトと40桁の表記，短縮形 |
 | [2](iteration-02.md) | `.git`の構成，`HEAD`，ゆるいオブジェクト，zlib |
 | [3](iteration-03.md) | オブジェクトを読む手順，`git cat-file`，短縮形の解決と曖昧さ |
+| [4](iteration-04.md) | treeオブジェクト，`git ls-tree`，ファイルのモード，treeの内容のバイト列 |
