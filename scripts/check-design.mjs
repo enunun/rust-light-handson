@@ -79,7 +79,7 @@ function readCode(srcDir) {
 		const fns = new Set();
 		for (const line of text.split('\n')) {
 			let m;
-			if ((m = line.match(/^\s*(?:pub(?:\([^)]*\))?\s+)?(?:struct|enum|trait|type)\s+([A-Za-z_]\w*)/))) types.add(m[1]);
+			if ((m = line.match(/^(?:pub(?:\([^)]*\))?\s+)?(?:struct|enum|trait|type)\s+([A-Za-z_]\w*)/))) types.add(m[1]);
 			if ((m = line.match(/^pub\s+fn\s+([A-Za-z_]\w*)/))) fns.add(m[1]);
 		}
 		modules.set(module, { types, fns });

@@ -6,4 +6,5 @@ resolver = "3"
 members = ["iterations/*/solution"]
 exclude = [
   "iterations/iteration-00/exercise",
+  "iterations/iteration-01/exercise",
 ]
