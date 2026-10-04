@@ -109,7 +109,7 @@ Iteration 1からの`exercise/`は，1つ前のIterationの`solution/`と同じ�
 | 3 | `cat-file` | `Read`トレイト，スライスの分割，ライフタイムの省略，`Option`と`Result`の変換 | オブジェクトのヘッダー，IDの短縮形 |
 | 4 | ツリーの読み取りと`ls-tree` | ライフタイム注釈，参照を持つ構造体，`TryFrom` | treeオブジェクト，ファイルのモード |
 | 5 | インデックス，`add`，`ls-files` | バイト列の読み書き，`from_be_bytes`，`BTreeMap`，再帰，`collect`と`Result` | インデックスの形式，ステージング |
-| 6 | `write-tree`と`commit-tree` | `Ordering`とイテレータの比較，ジェネリクス，`PhantomData`，型状態パターン | インデックスからツリーを作る，commitオブジェクト |
+| 6 | `write-tree`と`commit-tree` | `Ordering`とイテレーターの比較，ジェネリクス，型状態パターン | インデックスからツリーを作る，commitオブジェクト |
 | 7 | 参照，`commit`，`branch` | 検査済みのニュータイプ，`Drop`とRAII，`self`を消費するメソッド | 参照，`HEAD`，ロックファイル |
 | 8 | `log` | `Iterator`の実装，構造体の中の参照，`BinaryHeap`，`HashSet` | コミットのグラフ，`~N` |
 | 9 | オブジェクトストアの抽象化と`status` | トレイトの設計，ジェネリクスとトレイトオブジェクト，`BTreeMap`の突き合わせ | HEAD，インデックス，作業ディレクトリの3者の比較 |
@@ -405,10 +405,11 @@ $ git ls-files --stage
   - 署名は`<名前> <<メール>> <UNIX時刻> <±hhmm>`の形である．
 - `rgit commit-tree <tree> [-p <parent>]... -m <message>`は，commitを書き込み，そのIDを出力する．
   - 作者とコミッターは環境変数`GIT_AUTHOR_NAME`，`GIT_AUTHOR_EMAIL`，`GIT_AUTHOR_DATE`，`GIT_COMMITTER_NAME`，`GIT_COMMITTER_EMAIL`，`GIT_COMMITTER_DATE`から読む．
-  - 時刻は`@<UNIX時刻> <±hhmm>`の形とし，省略すれば現在の時刻と`+0000`を使う．名前かメールがなければエラーにする．
+  - 時刻は`@<UNIX時刻> <±hhmm>`の形とし，省略すれば現在の時刻と`+0000`を使う．
+  - 名前かメールがなければ`environment variable <名前> is not set`のエラーにする．
   - メッセージの末尾には改行を1つ付ける．
   - 同じ環境変数で本物の`git commit-tree`を実行した結果と，IDが一致する．
-- `cat-file -p`は，commitを解析してから直列化して出力する．
+- commitの内容を解析した結果を直列化すると，元の内容に戻る．
 
 ### 使用例
 
@@ -432,9 +433,12 @@ let commit = Commit::builder()
 
 ### モジュール
 
-- `tree`：`pub fn tree_bytes(entries: &[TreeEntry]) -> Vec<u8>`，エントリーの順序を決める関数
-- `repo`：`Repository::write_tree`
-- `commit`：`pub struct Signature`，`pub struct Commit`，`Commit::parse`，`Commit::to_bytes`，`pub struct CommitBuilder<T, A, C>`と状態を表す型
+- `tree`：エントリーの順序を決める`pub fn compare_entries(a: &TreeEntry, b: &TreeEntry) -> Ordering`
+- `tree`：エントリーを並べて内容にする`pub fn tree_bytes(entries: Vec<TreeEntry<'_>>) -> Vec<u8>`
+- `object`：種類を問わずIDを計算する`hash_object`
+- `repo`：`Repository::write_object`，`Repository::write_tree`
+- `commit`：`pub struct Signature`，`pub struct Commit`，`Commit::parse`，`Commit::to_bytes`
+- `commit`：`pub struct CommitBuilder<T, A, C>`と，指定していないことを表す型`pub struct Missing`
 - `cli`：`write-tree`と`commit-tree`のサブコマンド．`run`は環境変数を`&HashMap<String, String>`で受け取る．
 
 ### 図の更新
@@ -443,9 +447,9 @@ let commit = Commit::builder()
 
 ### 学ぶこと
 
-- Rust：`Ordering`，`sort_by`，イテレータの`chain`と`cmp`による比較，スライスのパターンと`split_first`
-- Rust：ジェネリクスの型引数，ゼロサイズ型と`PhantomData`，型状態パターン(状態ごとに`impl`を分ける)
-- Rust：`str::split_once`と`strip_prefix`，`HashMap`，`SystemTime`
+- Rust：`Ordering`，`sort_by`，イテレーターの`chain`と`cmp`による比較，`bool::then_some`，`while let`
+- Rust：ジェネリクスの型引数，ゼロサイズ型と`PhantomData`，型状態パターン(型引数で状態を表し，`build`を特定の状態にだけ実装する)
+- Rust：`str::split_once`，`strip_prefix`，`split_at_checked`，`HashMap`，`SystemTime`
 - Git：インデックスからツリーを組み立てる手順，エントリーの並び順，commitオブジェクトの形式，作者とコミッター
 
 ### 既存テストへの影響
@@ -532,7 +536,7 @@ $ rgit log -n 1 HEAD~1
 
 ### 学ぶこと
 
-- Rust：`Iterator`トレイトの実装と関連型`Item`，イテレータの遅延評価と`take`，参照を持つ構造体のライフタイム
+- Rust：`Iterator`トレイトの実装と関連型`Item`，イテレーターの遅延評価と`take`，参照を持つ構造体のライフタイム
 - Rust：`BinaryHeap`と`Reverse`，`HashSet`，`Hash`の導出
 - Git：コミットのグラフ(有向非巡回グラフ)，`log`の出力の順序，`~N`
 
