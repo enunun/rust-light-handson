@@ -603,10 +603,11 @@ M  hello.txt
 - `rgit diff`はインデックスと作業ディレクトリの，`rgit diff --cached`はHEADとインデックスの差分を，unified形式で出力する．
   - ファイルごとに`diff --git a/<パス> b/<パス>`，`index <短縮ID>..<短縮ID> <モード>`，`--- a/<パス>`，`+++ b/<パス>`を出力する．
   - 追加されたファイルは`new file mode <モード>`を，削除されたファイルは`deleted file mode <モード>`を出力し，ない側を`/dev/null`とする．
+  - モードが変わったファイルは`old mode <モード>`と`new mode <モード>`を出力する．中身が同じなら，`index`の行とハンクを出力しない．
   - 変更の前後3行を文脈として含め，近いハンクはまとめる．ハンクの見出しは`@@ -<開始>,<行数> +<開始>,<行数> @@`で，行数が1なら省略する．
   - 末尾に改行のないファイルは，最後の行の後ろに`\ No newline at end of file`を出力する．
   - NULを含むファイルは`Binary files a/<パス> and b/<パス> differ`と出力する．
-- 結果は，本物の`git diff`と一致する(ハンクの見出しの後ろの関数名を除く)．
+- 結果は，本物の`git diff`と一致する．ただし，ハンクの見出しの後ろの関数名は出力しない．同じ長さの編集が複数あるときは，`git`と違う編集を選ぶことがある．
 
 ### 使用例
 
@@ -633,7 +634,8 @@ assert_eq!(
 ### モジュール
 
 - `diff`：`pub enum Edit`，`pub fn diff<T: PartialEq>(a: &[T], b: &[T]) -> Vec<Edit>`，`pub struct Hunk`，`pub fn hunks(edits: &[Edit], context: usize) -> Vec<Hunk>`
-- `patch`：ファイルの差分をunified形式の文字列にする関数
+- `patch`：`pub struct FileVersion`(モード，ID，中身)，1つのファイルの差分をunified形式の文字列にする`pub fn file_patch`，`pub fn diff_work_tree`，`pub fn diff_cached`
+- `status`：HEAD，インデックス，作業ディレクトリの表を作る関数と`compare`を公開し，`patch`からも使う．
 - `cli`：`diff`のサブコマンドと`--cached`
 
 ### 図の更新
@@ -643,7 +645,7 @@ assert_eq!(
 ### 学ぶこと
 
 - Rust：トレイト境界を持つジェネリック関数，`enum`による操作の表現，`usize`と`isize`の変換と添字の計算
-- Rust：`str::split_inclusive`，`fmt::Write`と`write!`による文字列の組み立て，`windows`と`chunk_by`
+- Rust：`str::split_inclusive`，`fmt::Write`と`write!`による文字列の組み立て，`chunk_by`，`matches!`，`Option::transpose`
 - Git：Myersの差分アルゴリズム(編集グラフと対角線)，unified形式，ハンクと文脈
 
 ## Iteration 11：`add`と`status`の並列化

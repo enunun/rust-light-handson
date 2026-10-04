@@ -163,3 +163,4 @@ iterations/iteration-00/exercise/
 - RustOwlは，`rustowl toolchain install`で解析用のツールチェーンを入れるまで動かない(`cargo not found`の警告のあと`Failed to create analyzer`になる)．Dockerfileで`mise install`のあとに実行する．
 - pnpm 12は，公開から1日たっていない版をロックファイルに入れると`ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`で失敗する．ロックファイルを作り直すときは，`pnpm-lock.yaml`を消して`pnpm install`を実行する．
 - 教材に載せるCargoの出力のパスは，Dev Containerと同じ`/workspaces/...`にする．Cargoはシンボリックリンクを解決した実際のパスを表示するので，リポジトリを`/workspaces`にマウントした環境で実行して出力を取る．
+- `git diff`は，Myersのアルゴリズムの結果を整える(離れた変更をまとめる，字下げで区切りを選ぶ)ので，同じ長さの編集が複数ある変更では`rgit`と出力が違う．また，英字で始まる行がハンクより前にあると，見出しに関数名を付ける．`diff`の結合テストは，編集が1通りに決まる変更と，数の行で作る．

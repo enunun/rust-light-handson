@@ -14,3 +14,4 @@
 | [7](iteration-07.md) | 検査済みの値だけを持つ型，`str::contains`とクロージャ，`Drop`とRAII，値を消費するメソッド，RustOwlでムーブを見る，`OpenOptions::create_new`と`fs::rename`，`OsString`，`as_deref`，`match`のフィールドのパターン |
 | [8](iteration-08.md) | `Iterator`の実装と関連型，`Result`を要素にするイテレーター，遅延評価と`take`，`by_ref`，参照を持つ構造体，`BinaryHeap`，`HashSet`，`Ord`と`Hash`の導出，`let … else` |
 | [9](iteration-09.md) | トレイトの定義と実装，何をトレイトにするか，トレイト境界，`?Sized`，トレイトオブジェクトと`Box<dyn Trait>`，静的ディスパッチと動的ディスパッチ，テストのための差し替え，`BTreeSet`，`Option`の組の`match`，`map_or` |
+| [10](iteration-10.md) | 要素の型を問わないジェネリックな関数と`PartialEq`，操作を表す`enum`，`matches!`，`usize`と`isize`と`as`，`saturating_sub`，`unreachable!`，`split_inclusive`，`from_utf8_lossy`，`fmt::Write`と`write!`，タプル構造体の`Display`，`chunk_by`，`Option::transpose` |
