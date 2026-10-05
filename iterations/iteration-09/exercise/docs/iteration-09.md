@@ -12,7 +12,7 @@ treeを書く処理とコミットのグラフをたどる処理を，トレイ�
 
 次の2つのノートを読む．
 
-- [Rustのノート](../../../../docs/rust/iteration-09.md)：トレイトの定義と実装，何をトレイトにするか，トレイト境界，`?Sized`，トレイトオブジェクト，テストのための差し替え，2つの表の突き合わせ，テストの準備をまとめる構造体
+- [Rustのノート](../../../../docs/rust/iteration-09.md)：トレイトの定義と実装，何をトレイトにするか，トレイト境界，`?Sized`，トレイトオブジェクト，テストのための差し替え，2つの表の突き合わせ，テストの準備をまとめる構造体，最適化したビルドとコマンドの計測
 - [Gitのノート](../../../../docs/git/iteration-09.md)：3つの状態，`git status --porcelain`，速さの工夫
 
 読み終えたら，`src/lib.rs`の末尾に`#[cfg(test)] mod practice`を作り，次の課題を確かめる．
@@ -97,13 +97,36 @@ M  hello.txt
 - `status`では，3つの状態を`BTreeMap<String, (Mode, ObjectId)>`にそろえてから比べる．作業ディレクトリのファイルは`list_files`で集め，`hash_blob`でIDにする．
 - `Change`の文字と，`StatusEntry`の`Display`で，`git status --porcelain`の形を作る．
 
+### 速度を測る
+
+テストがすべて通ったら，ファイルの多いリポジトリで`rgit status`と`git status`の速さを比べる．
+
+1. `cargo build --release`で最適化したビルドを作り，パスを`RGIT`に入れる．
+2. 20個のディレクトリに，30KBほどのランダムなテキストを100個ずつ置いたリポジトリを作り，`git`でコミットする．
+
+   ```console
+   $ cargo build --release
+   (略)
+       Finished `release` profile [optimized] target(s) in 12.31s
+   $ export RGIT=$PWD/target/release/rgit
+   $ mkdir /tmp/many && cd /tmp/many
+   $ git init -q
+   $ for d in $(seq 0 19); do mkdir dir$d; for f in $(seq 0 99); do head -c 30000 /dev/urandom | base64 > dir$d/file$f.txt; done; done
+   $ git add . && git commit -qm first
+   $ $RGIT status
+   ```
+
+3. `hyperfine -N --warmup 3 "$RGIT status" 'git status --porcelain'`で，2つのコマンドの時間を比べる．
+4. `$RGIT status`の`User`の時間は何に使われているかを考える．
+
 ## 9-6 振り返り
 
 1. 自分の`TESTLIST.md`を[模範解答のテストリスト](../../solution/TESTLIST.md)と比べる．
 2. `ObjectStore`に`write_tree`や`read_commit`をメソッドとして加える設計と比べる．新しいオブジェクトストアを作る人の手間はどう変わるか．
 3. `write_tree`をジェネリックな関数にした．`&mut dyn ObjectStore`を受け取る関数にした場合と比べて，何が変わり，何が変わらないか．
 4. `status`の単体テストを`MemoryObjectStore`で書いた．`LooseObjectStore`で書く場合と比べて，何が楽になったか．逆に，何が確かめられなくなったか．
-5. 図と実装を見比べ，違うところがあれば図を直す．
+5. `git status`が`rgit status`よりずっと速いのはなぜか．`rgit`を同じくらい速くするには，何をインデックスと比べればよいか．
+6. 図と実装を見比べ，違うところがあれば図を直す．
 
 ## 9-7 発展課題
 

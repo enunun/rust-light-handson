@@ -350,13 +350,40 @@ Command::Status => {
 }
 ```
 
+### 速度を測る
+
+演習の手順で作った，2000個のファイル(合わせて約80MB)を持つリポジトリで測った結果である(値は計算機によって変わる)．
+
+```console
+$ hyperfine -N --warmup 3 "$RGIT status" 'git status --porcelain'
+Benchmark 1: /workspaces/iterations/iteration-09/exercise/target/release/rgit status
+  Time (mean ± σ):     220.7 ms ±  20.0 ms    [User: 180.8 ms, System: 34.6 ms]
+  Range (min … max):   201.1 ms … 266.7 ms    14 runs
+ 
+Benchmark 2: git status --porcelain
+  Time (mean ± σ):       6.5 ms ±   1.9 ms    [User: 2.9 ms, System: 5.9 ms]
+  Range (min … max):     4.2 ms …  30.1 ms    421 runs
+ 
+  Warning: Statistical outliers were detected. Consider re-running this benchmark on a quiet system without any interferences from other programs. It might help to use the '--warmup' or '--prepare' options.
+ 
+Summary
+  git status --porcelain ran
+   33.95 ± 10.20 times faster than /workspaces/iterations/iteration-09/exercise/target/release/rgit status
+```
+
+- `git status`は`rgit status`の約34倍速い．
+- `rgit status`の`User`の時間の多くは，2000個のファイルのSHA-1の計算である．ファイルはキャッシュに載っているので，読み込みの時間(`System`)は小さい．
+- `git status`は，インデックスに記録した大きさと更新時刻が今のファイルと同じなら，ファイルを読まない．数msで終わるのは，ファイルの情報を2000回調べるだけだからである．
+- `Warning: Statistical outliers`は，ほかの回から大きく外れた回があったという知らせである．`git status`の最も遅い回(30.1ms)は，平均の4倍以上かかっている．平均と標準偏差で比べ，大きく外れた回は気にしなくてよい．
+
 ## 9-6 振り返り
 
 1. 模範解答のリファクタリングの項目は，既存のテストを消さずに移している．テストを移す先を決めることが，責務を移す先を決めることになっている．
 2. トレイトのメソッドが増えると，新しいオブジェクトストアはすべてを実装する必要がある．`write_tree`は置き場所によらず同じ処理なので，トレイトの外の関数にすれば，実装する人は3つのメソッドだけを書けばよい．
 3. `&mut dyn ObjectStore`にすると，`write_tree`の機械語は1つになり，呼び出しは実行時に実装を選ぶ．呼ぶ側のコードと振る舞いは変わらない．
 4. ファイルを作らずにオブジェクトを読み書きできるので，一時ディレクトリの準備が要らない．その代わり，zlibの形式やファイルの置き場所は確かめられない．それは`LooseObjectStore`のテストと結合テストが受け持つ．
-5. 図に描いた型と関係は，コードと一致している．
+5. `git status`は，ファイルの中身を読まずに，インデックスに記録した大きさと更新時刻を今のファイルと比べる．`rgit`も，`fs::metadata`で得た大きさと更新時刻がインデックスのエントリーと同じファイルは，ハッシュの計算を省けばよい．Iteration 11の発展課題で作る．
+6. 図に描いた型と関係は，コードと一致している．
 
 ## 9-7 発展課題
 

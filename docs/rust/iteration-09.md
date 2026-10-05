@@ -185,3 +185,49 @@ struct Fixture {
 ```
 
 `dir`の`TempDir`は，`Fixture`と一緒に片付けられて消える．
+
+## 最適化したビルドとコマンドの計測
+
+Iteration 2では，関数の速さをcriterionで測った．コマンド全体の速さは，プログラムを何度も起動して測る．
+
+### `--release`のビルド
+
+`cargo build --release`は，最適化したプログラムを`target/release/`に作る．
+`cargo run`や別名の`rgit`は最適化しないビルドを使うので，速さを測るときは`target/release/rgit`を直接実行する．
+
+```console
+$ cargo build --release
+(略)
+   Compiling rgit v0.1.0 (/workspaces/iterations/iteration-09/exercise)
+    Finished `release` profile [optimized] target(s) in 12.31s
+$ ls target/release/rgit
+target/release/rgit
+```
+
+hyperfineは別のディレクトリで実行するので，バイナリの絶対パスを環境変数に入れておくと便利である．
+
+```console
+$ export RGIT=$PWD/target/release/rgit
+$ cd /tmp/many
+$ $RGIT status
+$ echo $?
+0
+```
+
+### hyperfine
+
+hyperfineは，コマンドを何度も実行して時間を測る道具である．複数のコマンドを並べると，比べた結果も表示する．
+
+```console
+$ hyperfine -N --warmup 3 "$RGIT status" 'git status --porcelain'
+Benchmark 1: /workspaces/iterations/iteration-09/exercise/target/release/rgit status
+  Time (mean ± σ):     220.7 ms ±  20.0 ms    [User: 180.8 ms, System: 34.6 ms]
+  Range (min … max):   201.1 ms … 266.7 ms    14 runs
+(略)
+```
+
+- `--warmup 3`は，測る前に3回実行する指定である．1回目はファイルの中身がメモリーのキャッシュになく，ディスクから読むので遅い．測りたいのがキャッシュに載ったあとの速さなら，先に実行しておく．
+- `-N`は，シェルを通さずにコマンドを実行する指定である．シェルの起動の時間が結果に混ざらない．数msで終わるコマンドを測るときに付ける．
+- `mean ± σ`は，平均と標準偏差である．`σ`が大きいときは，ほかのプログラムの影響を受けている．
+- `User`はプログラム自身の計算に，`System`はOSの処理(ファイルの読み込みなど)に使ったCPUの時間である．
+- `Range`は，最も速い回と遅い回の時間と，実行した回数である．hyperfineは，少なくとも10回，3秒を超えるまで実行する．
