@@ -4,7 +4,7 @@
 
 ## 10-1 準備
 
-`Cargo.toml`は，Iteration 9の模範解答からパッケージ名だけを変えたものである．依存は変わらない．
+`Cargo.toml`は，Iteration 9の模範解答からパッケージ名を変え，10-5の最後で`[[bench]]`の`diff`を加えたものである．依存は変わらない．
 
 ## 10-2 文法と概念
 
@@ -376,13 +376,197 @@ Command::Diff { cached } => {
 
 `cli.rs`は`std::io::Write`を使うので，`patch.rs`だけが`std::fmt::Write`を使う．モジュールを分けたので，2つの`Write`がぶつからない．
 
+### 速度を測る
+
+`benches/diff.rs`である．行の数を変えるグループと，書き換える行の数を変えるグループを作った．
+
+```rust
+use std::hint::black_box;
+
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use rgit::diff::diff;
+
+/// 0から`n - 1`までの数を1つずつ並べた行．
+fn lines(n: usize) -> Vec<String> {
+    (0..n).map(|i| i.to_string()).collect()
+}
+
+/// `a`の行のうち`changes`個を，等間隔に書き換える．1行の書き換えは，削除と挿入の2つの編集になる．
+fn changed(a: &[String], changes: usize) -> Vec<String> {
+    let step = a.len() / changes;
+    let mut b = a.to_vec();
+    for i in 0..changes {
+        b[i * step] = format!("changed {i}");
+    }
+    b
+}
+
+/// 書き換える行の数を10に固定し，行の数を変える．
+fn by_length(c: &mut Criterion) {
+    let mut group = c.benchmark_group("diff/length");
+    for n in [1_000, 10_000, 100_000] {
+        let a = lines(n);
+        let b = changed(&a, 10);
+        group.bench_with_input(BenchmarkId::from_parameter(n), &b, |bench, b| {
+            bench.iter(|| diff(black_box(&a), black_box(b)))
+        });
+    }
+    group.finish();
+}
+
+/// 行の数を20000に固定し，書き換える行の数を変える．
+fn by_changes(c: &mut Criterion) {
+    let mut group = c.benchmark_group("diff/changes");
+    let a = lines(20_000);
+    for changes in [10, 100, 1_000] {
+        let b = changed(&a, changes);
+        group.bench_with_input(BenchmarkId::from_parameter(changes), &b, |bench, b| {
+            bench.iter(|| diff(black_box(&a), black_box(b)))
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(benches, by_length, by_changes);
+criterion_main!(benches);
+```
+
+- 行は数を1つずつ並べたものなので，どの2行も違う．書き換えた行の数がそのまま変更の数になる．
+- 2つのグループは，同じ入力を含まないようにした．大きな`Vec`を確保して手放すと，メモリーを確保する仕組みの状態が変わる．そのため，あとで測る同じ入力の時間も変わりうる．
+
+最初に書いた`diff`の結果である(値は計算機によって変わる)．
+
+```console
+$ cargo bench --bench diff
+(略)
+    Finished `bench` profile [optimized] target(s) in 2.09s
+     Running benches/diff.rs (target/release/deps/diff-5890411a71ee7ae4)
+Gnuplot not found, using plotters backend
+diff/length/1000        time:   [40.551 µs 41.305 µs 42.092 µs]
+Found 4 outliers among 100 measurements (4.00%)
+  4 (4.00%) high mild
+diff/length/10000       time:   [3.9858 ms 4.0730 ms 4.1641 ms]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+diff/length/100000      time:   [43.773 ms 44.310 ms 44.894 ms]
+Found 13 outliers among 100 measurements (13.00%)
+  10 (10.00%) high mild
+  3 (3.00%) high severe
+
+diff/changes/10         time:   [2.8932 ms 2.9871 ms 3.0822 ms]
+Found 2 outliers among 100 measurements (2.00%)
+  1 (1.00%) low mild
+  1 (1.00%) high mild
+
+Warning: Unable to complete 100 samples in 5.0s. You may wish to increase target time to 8.8s, or reduce sample count to 50.
+diff/changes/100        time:   [86.334 ms 87.667 ms 89.119 ms]
+Found 13 outliers among 100 measurements (13.00%)
+  7 (7.00%) high mild
+  6 (6.00%) high severe
+
+Warning: Unable to complete 100 samples in 5.0s. You may wish to increase target time to 665.7s, or reduce sample count to 10.
+diff/changes/1000       time:   [1.3333 s 1.4479 s 1.5693 s]
+Found 9 outliers among 100 measurements (9.00%)
+  9 (9.00%) high mild
+```
+
+10行を書き換えただけ(編集の長さは20)なのに，1万行で4ms，10万行で44msかかる．
+原因は，各段階の初めの`trace.push(v.clone())`である．`v`の長さは`2 * (n + m) + 3`なので，10万行どうしなら1回で40万個の`isize`(約3.2MB)を複製する．
+20段階で約64MBを複製し，同じ量のメモリーを確保する．行を比べる処理より，この複製のほうがずっと重い．
+
+段階`d`で`v`から読むのは，`goes_down`と`v[slot(k ± 1, max)]`が使う対角線`-d - 1`から`d + 1`までの値だけである．
+記録をこの範囲に絞ると，1段階の記録は`2 * d + 3`個になり，行の数によらなくなる．
+
+```diff
+     for d in 0..=max {
+-        trace.push(v.clone());
++        // 段階dで読むのは，対角線-d - 1からd + 1までの値だけである．その範囲だけを記録する．
++        trace.push(v[slot(-d - 1, max)..=slot(d + 1, max)].to_vec());
+```
+
+`trace[d]`の先頭は対角線`-d - 1`なので，`backtrack`では添字を`slot(k, d)`で求める．
+`goes_down`と`slot`の引数`max`に`d`を渡せばよく，2つの関数は変えずに済む．
+
+```diff
+ fn backtrack(trace: &[Vec<isize>], n: isize, m: isize) -> Vec<Edit> {
+-    let max = n + m;
+     let mut edits = Vec::new();
+     let (mut x, mut y) = (n, m);
+     for (d, v) in trace.iter().enumerate().rev() {
+         let d = d as isize;
+         let k = x - y;
+-        let prev_k = if goes_down(v, k, d, max) {
+-            k + 1
+-        } else {
+-            k - 1
+-        };
+-        let prev_x = v[slot(prev_k, max)];
++        let prev_k = if goes_down(v, k, d, d) { k + 1 } else { k - 1 };
++        let prev_x = v[slot(prev_k, d)];
+```
+
+`cargo test`で，`diff`の単体テストと`git diff`と比べる結合テストがすべて通ることを確かめてから，もう一度測った．
+`change`は，直前の結果(最初の`diff`)との差である．
+
+```console
+$ cargo bench --bench diff
+(略)
+    Finished `bench` profile [optimized] target(s) in 6.35s
+     Running benches/diff.rs (target/release/deps/diff-5890411a71ee7ae4)
+Gnuplot not found, using plotters backend
+diff/length/1000        time:   [11.019 µs 11.296 µs 11.626 µs]
+                        change: [−72.815% −71.780% −70.628%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 19 outliers among 100 measurements (19.00%)
+  2 (2.00%) high mild
+  17 (17.00%) high severe
+diff/length/10000       time:   [103.13 µs 104.19 µs 105.47 µs]
+                        change: [−97.489% −97.419% −97.347%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 25 outliers among 100 measurements (25.00%)
+  1 (1.00%) low severe
+  9 (9.00%) low mild
+  4 (4.00%) high mild
+  11 (11.00%) high severe
+diff/length/100000      time:   [2.3373 ms 2.4027 ms 2.4715 ms]
+                        change: [−94.741% −94.578% −94.402%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 6 outliers among 100 measurements (6.00%)
+  6 (6.00%) high mild
+
+diff/changes/10         time:   [189.45 µs 195.70 µs 202.39 µs]
+                        change: [−93.802% −93.566% −93.317%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 6 outliers among 100 measurements (6.00%)
+  3 (3.00%) high mild
+  3 (3.00%) high severe
+diff/changes/100        time:   [479.51 µs 493.64 µs 510.40 µs]
+                        change: [−99.425% −99.402% −99.379%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 15 outliers among 100 measurements (15.00%)
+  12 (12.00%) high mild
+  3 (3.00%) high severe
+
+Warning: Unable to complete 100 samples in 5.0s. You may wish to increase target time to 5.5s, or reduce sample count to 90.
+diff/changes/1000       time:   [50.629 ms 51.851 ms 53.246 ms]
+                        change: [−96.710% −96.419% −96.093%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 14 outliers among 100 measurements (14.00%)
+  4 (4.00%) high mild
+  10 (10.00%) high severe
+```
+
+- 10万行で10行を書き換えた場合は，44msから2.4msになった．残りの時間の多くは，一致する行を斜めに進みながら比べる処理である．
+- 書き換える行の数を10倍にすると，時間は2.5倍，約105倍になった．記録の量は段階ごとに`2 * d + 3`個なので，合わせて編集の長さの2乗に比例する．変更の多いファイルでは，記録の量が時間を決める．
+
 ## 10-6 振り返り
 
 1. 模範解答は，`git`で試した出力の規則を，1つの規則に1つのテストで書いている．どの規則が壊れたかが，テストの名前でわかる．
 2. `&[&str]`だけを受け取る関数にすると，テストにも行の配列が要る．ジェネリックにしたので，数や文字の短い列でテストを書け，単語の差分などにも使える．
 3. 添字を持つ`Edit`は`Copy`で，元の列の寿命に縛られない．参照を持つ`Edit<'a, T>`なら，表示するときに元の列を引かずに済むが，`Edit`を使う型すべてにライフタイムと型引数が付く．
 4. `String`を返すと，テストは`assert_eq!`で比べるだけでよい．`impl io::Write`に書くと大きな差分でもメモリーを使わずに済むが，テストでは`Vec<u8>`に書いて文字列に戻す手間が増える．
-5. 図に描いた型と関係は，コードと一致している．
+5. 直す前は，記録の量が編集の長さと行の数の積に比例した．直したあとは，編集の長さの2乗に比例する．全体を書き換えた1万行のファイルどうしでは，編集の長さが2万になり，記録は約4億個(約3.2GB)になる．本物の`git`は，各段階の`v`を記録しない．中間の点を見つけて半分ずつ解く方法で，メモリーの量を，行の数に比例する程度で済ませている．
+6. 図に描いた型と関係は，コードと一致している．
 
 ## 10-7 発展課題
 

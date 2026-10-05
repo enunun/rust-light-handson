@@ -207,3 +207,44 @@ let old_version: Option<FileVersion> = old
 | `None` | `Ok(None)` | `None` |
 | `Some(Ok(v))` | `Ok(Some(v))` | `Some(v)` |
 | `Some(Err(e))` | `Err(e)` | 関数から`e`を返す |
+
+## ベンチマークのグループ
+
+入力の大きさを変えながら同じ関数を測るときは，criterionのグループを使う．
+
+```rust
+fn by_length(c: &mut Criterion) {
+    let mut group = c.benchmark_group("diff/length");
+    for n in [1_000, 10_000, 100_000] {
+        let a = lines(n);
+        let b = changed(&a, 10);
+        group.bench_with_input(BenchmarkId::from_parameter(n), &b, |bench, b| {
+            bench.iter(|| diff(black_box(&a), black_box(b)))
+        });
+    }
+    group.finish();
+}
+```
+
+- `benchmark_group`は，名前を共有するベンチマークのまとまりを作る．`finish`で閉じる．
+- `bench_with_input`は，入力を受け取るベンチマークである．`BenchmarkId::from_parameter(n)`で，入力の大きさを名前に入れる．結果は`diff/length/10000`のような名前で表示される．
+- 入力の準備(`lines`，`changed`)は`bench.iter`の外で行い，測る時間に入れない．
+
+### 前回との比較
+
+criterionは，同じ名前のベンチマークの前回の結果を`target/criterion/`に残している．
+コードを直して測り直すと，`change`に差の割合を表示し，偶然の揺れでは説明できない差なら`Performance has improved.`(速くなった)か`Performance has regressed.`(遅くなった)と書く．
+
+```console
+diff/length/100000      time:   [2.3373 ms 2.4027 ms 2.4715 ms]
+                        change: [−94.741% −94.578% −94.402%] (p = 0.00 < 0.05)
+                        Performance has improved.
+```
+
+`p`は，2回の結果が同じ分布から出たとしたときに，これだけの差が偶然に現れる確率である．0.05より小さければ，本当に速さが変わったとみなす．
+
+### 計算量と測定
+
+計算量(入力の大きさに対して時間がどう増えるか)の見積もりは，測る前の予想になる．
+入力の大きさを10倍ずつ変えて測り，時間が10倍になるか100倍になるかを見ると，どの部分が効いているかの手がかりになる．
+予想と違う増え方をしたら，コードの中に，予想に入れていなかった仕事(複製，確保，余分なループ)がある．

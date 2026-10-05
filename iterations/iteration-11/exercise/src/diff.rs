@@ -21,7 +21,8 @@ pub fn diff<T: PartialEq>(a: &[T], b: &[T]) -> Vec<Edit> {
     let mut v = vec![0; 2 * max as usize + 3];
     let mut trace = Vec::new();
     for d in 0..=max {
-        trace.push(v.clone());
+        // 段階dで読むのは，対角線-d - 1からd + 1までの値だけである．その範囲だけを記録する．
+        trace.push(v[slot(-d - 1, max)..=slot(d + 1, max)].to_vec());
         for k in (-d..=d).step_by(2) {
             let mut x = if goes_down(&v, k, d, max) {
                 v[slot(k + 1, max)]
@@ -42,7 +43,7 @@ pub fn diff<T: PartialEq>(a: &[T], b: &[T]) -> Vec<Edit> {
     unreachable!("d = n + mまでに必ず終点に着く")
 }
 
-/// 対角線kの値を置く`v`の添字．kは`-max - 1..=max + 1`の範囲にある．
+/// 対角線`-max - 1`から`max + 1`までの値を並べた配列で，対角線kの値を置く添字．
 fn slot(k: isize, max: isize) -> usize {
     (k + max + 1) as usize
 }
@@ -54,19 +55,15 @@ fn goes_down(v: &[isize], k: isize, d: isize, max: isize) -> bool {
 }
 
 /// `diff`が記録した各段階の`v`を，終点から始点へたどって編集を集める．
+/// `trace[d]`は対角線`-d - 1`から`d + 1`までの値を持つので，添字は`slot(k, d)`で求める．
 fn backtrack(trace: &[Vec<isize>], n: isize, m: isize) -> Vec<Edit> {
-    let max = n + m;
     let mut edits = Vec::new();
     let (mut x, mut y) = (n, m);
     for (d, v) in trace.iter().enumerate().rev() {
         let d = d as isize;
         let k = x - y;
-        let prev_k = if goes_down(v, k, d, max) {
-            k + 1
-        } else {
-            k - 1
-        };
-        let prev_x = v[slot(prev_k, max)];
+        let prev_k = if goes_down(v, k, d, d) { k + 1 } else { k - 1 };
+        let prev_x = v[slot(prev_k, d)];
         let prev_y = prev_x - prev_k;
         while x > prev_x && y > prev_y {
             x -= 1;
