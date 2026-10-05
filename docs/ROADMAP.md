@@ -653,7 +653,7 @@ assert_eq!(
 ### 要件
 
 - `rgit add`と`rgit status`は，ファイルの読み込みとハッシュの計算を複数のスレッドで行う．
-  - スレッドの数は`--jobs <N>`で指定する．省略すれば`std::thread::available_parallelism`の値を使う．
+  - スレッドの数は`--jobs <N>`(`-j <N>`)で指定する．省略すれば`std::thread::available_parallelism`の値を使う．`diff`は，作業ディレクトリのハッシュを`available_parallelism`の数のスレッドで計算する．
   - 結果は，スレッドの数によらず同じである．
 - `ObjectStore`の書き込みは`&self`で行い，トレイトに`Send + Sync`を求める．
   - `MemoryObjectStore`は`Mutex`で中身を守る．
@@ -670,8 +670,10 @@ A  src/main.rs
 
 ### モジュール
 
-- `store`：`ObjectStore::write`を`&self`にする．`MemoryObjectStore`の中身を`Mutex<HashMap<…>>`にする．
-- `parallel`：`pub fn map_parallel<T, R, F>(items: &[T], jobs: usize, f: F) -> Vec<R>`(`std::thread::scope`とチャネルを使う)
+- `store`：`ObjectStore::write`を`&self`にし，トレイトに`Send + Sync`を求める．`MemoryObjectStore`の中身を`Mutex<HashMap<…>>`にする．
+- `repo`：`objects_mut`を消し，`add`と`commit`を`&self`にする．
+- `parallel`：`pub fn map_parallel<T, R, F>(items: &[T], jobs: usize, f: F) -> Vec<R>`と`pub fn available_jobs() -> usize`
+  - `map_parallel`は，`std::thread::scope`，次の要素を配る`AtomicUsize`，結果を集めるチャネルを使う．
 - `repo`と`status`：ファイルごとの処理を`map_parallel`で行う．
 - `cli`：`--jobs`の引数
 
@@ -682,9 +684,9 @@ A  src/main.rs
 ### 学ぶこと
 
 - Rust：スレッド，`std::thread::scope`，クロージャのトレイト`Fn`と`Send`，`Send`と`Sync`，`available_parallelism`
-- Rust：`Mutex`と内部可変性，`RefCell`を持つ型を共有しようとしたときのコンパイルエラー，`mpsc`のチャネル，`thread::spawn`と`Arc`との比較
+- Rust：`Mutex`と内部可変性，`RefCell`を持つ型を共有しようとしたときのコンパイルエラー，`mpsc`のチャネル，`AtomicUsize`，`thread::spawn`と`Arc`との比較，親トレイトと`where`
 - Git：オブジェクトの書き込みの原子性(一時ファイルと名前の変更)
 
 ### 既存テストへの影響
 
-- `ObjectStore::write`が`&self`になるので，`&mut`で呼んでいたテストを変える．
+- `ObjectStore::write`が`&self`になるので，`&mut`で呼んでいたテストを変える．`add`，`status`，`work_tree_files`，`diff_work_tree`はスレッドの数を受け取る．
