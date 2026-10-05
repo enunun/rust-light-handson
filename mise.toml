@@ -6,6 +6,8 @@ pnpm = "12.6.0"
 rust = { version = "1.98.1", components = "rustfmt,clippy" }
 # 所有権とライフタイムを可視化するRustOwl．VS Codeの拡張機能cordx56.rustowl-vscodeから使う．
 "github:cordx56/rustowl" = "0.4.0"
+# コマンドの時間を測る．
+hyperfine = "1.20.0"
 # 版を固定する場合はここで`mise lock`を実行し，生成されたmise.lockもコミットする．
 
 # 実際に利用する場合には以下を有効にする

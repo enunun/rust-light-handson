@@ -99,22 +99,32 @@ Iteration 1からの`exercise/`は，1つ前のIterationの`solution/`と同じ�
 - 結合テストは，パッケージの`tests/`に書く．一時ディレクトリにリポジトリを作り，`rgit::cli::run`にコマンドラインの引数を渡して，出力とリポジトリの中身を確かめる．
   - Iteration 2からは，同じ操作を本物の`git`でも行い，ハッシュや出力が一致することを確かめる．
 
+## 速度の計測
+
+処理の時間が問題になるところでは，テストで正しさを確かめたあとに速度を測る．
+
+- 関数の速度は，criterionで書いたベンチマーク(`benches/`)を`cargo bench`で測る．Iteration 2で始める．
+- コマンドの速度は，`--release`でビルドした`rgit`をhyperfineで測る．Iteration 9で始める．
+- 測った結果から遅い部分を見つけ，直したら同じ方法で測り直す．速くするための変更でも，振る舞いは既存のテストで守る．
+
+測った値は計算機によって変わる．解説の値は，4つのCPUを持つDev Containerで測ったものである．
+
 ## Iteration一覧
 
 | # | 作る機能 | Rustで学ぶこと | Gitで学ぶこと |
 | --- | --- | --- | --- |
 | 0 | blobのハッシュの計算 | Cargo，関数，`&[u8]`と`Vec<u8>`，外部クレート，`#[test]` | 内容アドレス，blobとSHA-1 |
 | 1 | オブジェクトID | 所有権，ムーブ，借用，`Copy`，ニュータイプ，`Display`と`FromStr` | オブジェクトIDと16進表記 |
-| 2 | `init`と`hash-object -w` | clapのderive，`Path`と`PathBuf`，`std::fs`，`Write`トレイト，thiserrorと`?` | `.git`の構成，ゆるいオブジェクトとzlib |
+| 2 | `init`と`hash-object -w` | clapのderive，`Path`と`PathBuf`，`std::fs`，`Write`トレイト，thiserrorと`?`，criterionによる計測 | `.git`の構成，ゆるいオブジェクトとzlib |
 | 3 | `cat-file` | `Read`トレイト，スライスの分割，ライフタイムの省略，`Option`と`Result`の変換 | オブジェクトのヘッダー，IDの短縮形 |
 | 4 | ツリーの読み取りと`ls-tree` | ライフタイム注釈，参照を持つ構造体，`TryFrom` | treeオブジェクト，ファイルのモード |
 | 5 | インデックス，`add`，`ls-files` | バイト列の読み書き，`from_be_bytes`，`BTreeMap`，再帰，`collect`と`Result` | インデックスの形式，ステージング |
 | 6 | `write-tree`と`commit-tree` | `Ordering`とイテレーターの比較，ジェネリクス，型状態パターン | インデックスからツリーを作る，commitオブジェクト |
 | 7 | 参照，`commit`，`branch` | 検査済みのニュータイプ，`Drop`とRAII，`self`を消費するメソッド | 参照，`HEAD`，ロックファイル |
 | 8 | `log` | `Iterator`の実装，構造体の中の参照，`BinaryHeap`，`HashSet` | コミットのグラフ，`~N` |
-| 9 | オブジェクトストアの抽象化と`status` | トレイトの設計，ジェネリクスとトレイトオブジェクト，`BTreeMap`の突き合わせ | HEAD，インデックス，作業ディレクトリの3者の比較 |
-| 10 | `diff` | トレイト境界を持つジェネリック関数，`enum`による編集の表現，`fmt::Write` | Myersの差分アルゴリズム，unified形式 |
-| 11 | `add`と`status`の並列化 | `std::thread::scope`，`Send`と`Sync`，`Mutex`，チャネル | オブジェクトの書き込みの原子性 |
+| 9 | オブジェクトストアの抽象化と`status` | トレイトの設計，ジェネリクスとトレイトオブジェクト，`BTreeMap`の突き合わせ，hyperfineによる計測 | HEAD，インデックス，作業ディレクトリの3者の比較，インデックスのファイルの情報 |
+| 10 | `diff` | トレイト境界を持つジェネリック関数，`enum`による編集の表現，`fmt::Write`，計測による改善 | Myersの差分アルゴリズム，unified形式 |
+| 11 | `add`と`status`の並列化 | `std::thread::scope`，`Send`と`Sync`，`Mutex`，チャネル，スレッドの数と速度 | オブジェクトの書き込みの原子性 |
 
 ## Iteration 0：blobのハッシュの計算
 
@@ -240,6 +250,11 @@ hello
 - `object`：ヘッダーと内容を連結したバイト列を作る`blob_bytes`を加え，`hash_blob`はそのハッシュを計算する(リファクタリング)．
 - `main.rs`：`cli::run`を呼び，エラーを出力する．
 
+### 速度の計測
+
+- `benches/object.rs`：1MiBほどのデータで，`hash_blob`と，`write_blob`と同じ設定のzlibの圧縮の時間を比べる．
+- 同じベンチマークを最適化なしのビルド(`--profile dev`)でも測り，`cargo test`と`cargo bench`のビルドの違いを確かめる．
+
 ### 図の更新
 
 - `types.md`：`cli`，`repo`，`error`の名前空間と，`Cli`，`Command`，`Repository`，`Error`を加える．`cli`から`Repository`への依存を描く．
@@ -249,7 +264,8 @@ hello
 - Rust：属性とderiveマクロ，clapのderive(`Parser`，`Subcommand`)，`Path`と`PathBuf`，`Path::ancestors`，`std::fs`
 - Rust：`io::Write`トレイト，引数の`impl Write`，`Vec<u8>`への書き込み，thiserrorによるエラー型，`#[from]`と`?`による変換
 - Rust：`if let`と`matches!`，イテレーターの`skip`，`map`，`collect`の基本，`std::process::exit`，`std::process::Command`を使うテスト
-- Git：`.git`ディレクトリの構成，ゆるいオブジェクト，zlib
+- Rust：criterionによるベンチマーク，`std::hint::black_box`，ビルドのプロファイル(`dev`と`release`)
+- Git：`.git`ディレクトリの構成，ゆるいオブジェクト，zlib，圧縮とハッシュの計算の重さ
 
 ### 受講者が行うツール操作
 
@@ -258,6 +274,7 @@ hello
 - `cargo run -- init`のように，`--`の後ろにプログラムの引数を渡す．
 - `cargo test --test 名前`で，1つの結合テストのファイルだけを実行する．
 - `cargo run`の`--manifest-path`を使う別名`rgit`を作り，別のディレクトリで試す．
+- `cargo add --dev criterion`でベンチマークの依存を加え，`Cargo.toml`に`[[bench]]`を書き，`cargo bench`で測る．`--profile dev`で最適化なしのビルドでも測る．
 
 ### 既存テストへの影響
 
@@ -580,6 +597,11 @@ M  hello.txt
 - `worktree`：ファイルのモードを決める`pub fn file_mode`
 - `cli`：`status`のサブコマンド
 
+### 速度の計測
+
+- 2000個のファイルを持つリポジトリで，`--release`でビルドした`rgit status`と`git status --porcelain`の時間をhyperfineで比べる．
+- `rgit`は作業ディレクトリのすべてのファイルを読んでハッシュを計算するので，`git`より遅い．`git`は，インデックスに記録したファイルの大きさと更新時刻が変わっていなければ，ファイルを読まない．
+
 ### 図の更新
 
 - `types.md`：`store`の名前空間に`ObjectStore`と2つの実装を加え，実現の関係を描く．`status`の名前空間を加える．
@@ -589,7 +611,13 @@ M  hello.txt
 - Rust：トレイトの設計(何をトレイトにし，何を具体的な型に残すか)，トレイト境界とジェネリクス，`?Sized`
 - Rust：`dyn Trait`との比較(静的ディスパッチと動的ディスパッチ)，テストのための差し替え
 - Rust：2つの`BTreeMap`の突き合わせと`BTreeSet`，`Option`のタプルによる`match`，`map_or`，テストの準備をまとめる構造体
-- Git：HEAD，インデックス，作業ディレクトリの3者の比較，追跡されていないファイル
+- Rust：`--release`のビルド，hyperfineによるコマンドの計測(準備の実行，平均と標準偏差)
+- Git：HEAD，インデックス，作業ディレクトリの3者の比較，追跡されていないファイル，インデックスのファイルの情報(大きさと更新時刻)によるハッシュの計算の省略
+
+### 受講者が行うツール操作
+
+- `cargo build --release`で最適化したバイナリを作り，`target/release/rgit`を実行する．
+- `hyperfine --warmup 3 'コマンド1' 'コマンド2'`で，2つのコマンドの時間を比べる．
 
 ### 既存テストへの影響
 
@@ -638,6 +666,11 @@ assert_eq!(
 - `status`：HEAD，インデックス，作業ディレクトリの表を作る関数と`compare`を公開し，`patch`からも使う．
 - `cli`：`diff`のサブコマンドと`--cached`
 
+### 速度の計測
+
+- `benches/diff.rs`：criterionのベンチマークのグループで，行の数を変えたとき(変更の数は同じ)と，変更の数を変えたとき(行の数は同じ)の`diff`の時間を測る．
+- 単純に書いた`diff`は，各段階の`v`の全体を複製して記録するので，変更が少なくても行の数に比例して遅くなる．各段階で使う範囲だけを記録するように直し，既存のテストが通ることと，速くなったことをcriterionの比較で確かめる．
+
 ### 図の更新
 
 - `types.md`：`diff`と`patch`の名前空間と，`Edit`，`Hunk`を加える．`patch`から`diff`と`status`への依存を描く．
@@ -646,6 +679,7 @@ assert_eq!(
 
 - Rust：トレイト境界を持つジェネリック関数，`enum`による操作の表現，`usize`と`isize`の変換と添字の計算
 - Rust：`str::split_inclusive`，`fmt::Write`と`write!`による文字列の組み立て，`chunk_by`，`matches!`，`Option::transpose`
+- Rust：criterionのベンチマークのグループと`BenchmarkId`，前回の結果との比較，計算量と計測の結果の対応
 - Git：Myersの差分アルゴリズム(編集グラフと対角線)，unified形式，ハンクと文脈
 
 ## Iteration 11：`add`と`status`の並列化
@@ -677,6 +711,12 @@ A  src/main.rs
 - `repo`と`status`：ファイルごとの処理を`map_parallel`で行う．
 - `cli`：`--jobs`の引数
 
+### 速度の計測
+
+- hyperfineの`-L`でスレッドの数を変え，`add`と`status`の時間を測る．`add`は`--prepare`で測るたびにリポジトリを作り直す．
+- スレッドの数を2倍にしても時間が半分にならない理由を，並列にしない処理(ディレクトリの走査，インデックスの読み書き)の割合から考える．
+- 発展課題では，インデックスのファイルの情報が一致するファイルのハッシュの計算を省き，`status`の速さを`git`と比べる．
+
 ### 図の更新
 
 - `types.md`：`ObjectStore`に`Send + Sync`の境界を書き，`MemoryObjectStore`が`Mutex`を持つことを書く．`parallel`の名前空間を加える．
@@ -685,7 +725,12 @@ A  src/main.rs
 
 - Rust：スレッド，`std::thread::scope`，クロージャのトレイト`Fn`と`Send`，`Send`と`Sync`，`available_parallelism`
 - Rust：`Mutex`と内部可変性，`RefCell`を持つ型を共有しようとしたときのコンパイルエラー，`mpsc`のチャネル，`AtomicUsize`，`thread::spawn`と`Arc`との比較，親トレイトと`where`
+- Rust：hyperfineの`-L`と`--prepare`によるスレッドの数ごとの計測，アムダールの法則
 - Git：オブジェクトの書き込みの原子性(一時ファイルと名前の変更)
+
+### 受講者が行うツール操作
+
+- `hyperfine -L jobs 1,2,4 --prepare 'コマンド' 'rgit add --jobs {jobs} .'`のように，引数を変えながら測る．
 
 ### 既存テストへの影響
 

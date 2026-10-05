@@ -15,7 +15,7 @@ $ git log --oneline
 
 - Rust：所有権と借用，ライフタイム，ニュータイプと`enum`による型の設計，型状態パターン，トレイトとジェネリクス，`Iterator`の実装，`Drop`とRAII，`Result`によるエラー処理，スレッドと`Send`/`Sync`
 - Git：内容アドレスとオブジェクト(blob，tree，commit)，zlibによる格納，インデックス，参照と`HEAD`，コミットのグラフ，`status`と`diff`の仕組み
-- 開発の進め方：テストリストから始めるテスト駆動開発と，型とモジュールの図による設計
+- 開発の進め方：テストリストから始めるテスト駆動開発，型とモジュールの図による設計，criterionとhyperfineによる速度の計測
 
 ## 前提
 
@@ -38,7 +38,7 @@ $ rustowl --version
 RustOwl v0.4.0
 ```
 
-Dev Containerには，Rust，`git`，`xxd`，所有権を可視化するRustOwl，VS Codeの拡張機能(rust-analyzer，RustOwl，デバッガーのCodeLLDB，Mermaidのプレビュー)が入っている．
+Dev Containerには，Rust，`git`，`xxd`，コマンドの時間を測るhyperfine，所有権を可視化するRustOwl，VS Codeの拡張機能(rust-analyzer，RustOwl，デバッガーのCodeLLDB，Mermaidのプレビュー)が入っている．
 `mise tasks`で，使えるタスクの一覧を表示できる．
 
 Dev Containersを使わない場合は，次を用意する．
@@ -47,6 +47,7 @@ Dev Containersを使わない場合は，次を用意する．
 - CのリンカーとCの標準ライブラリ(Debian系では`gcc`と`libc6-dev`)
 - `git`と`xxd`
 - Node.jsとpnpm(`pnpm install`を実行する．Mermaidの図の検査に使う)
+- hyperfine 1.20.0(Iteration 9から使う)
 - RustOwl 0.4.0(任意．`rustowl toolchain install`まで実行する)
 
 ## 進め方

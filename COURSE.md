@@ -13,6 +13,7 @@
   - 不正な値を作れない型を，ニュータイプ，`enum`，型状態パターンで設計できる．
   - トレイトとジェネリクスで実装を差し替えられる設計にし，テストで使い分けられる．
   - `std::thread::scope`，`Mutex`，チャネルで処理を並列にし，`Send`と`Sync`のエラーを読める．
+  - criterionとhyperfineで速度を測り，遅い部分を見つけて直し，直した効果を数字で確かめられる．
   - Gitのオブジェクト，ツリー，インデックス，コミット，参照の仕組みと，`status`と`diff`が何を比べているかを説明できる．
 - 教材は日本語で書く．文体は常体(である調)で，句読点は「，」と「．」を使う．`pnpm lint`(textlintとmarkdownlint)を通す．
 - 規模は12回のIteration(0〜11)で，1回あたり60〜120分とする．1つのIterationで扱うRustの話題は，1つか2つのまとまりに絞る．
@@ -48,6 +49,7 @@ Gitとの互換の方針は次のとおりである．
 - Rust 1.98.1をmiseで入れる(`mise.toml`)．エディションは2024とする．
 - テストは`cargo test`，整形は`cargo fmt`，リントは`cargo clippy -- -D warnings`を使う．
 - 本物の`git`を，結合テストでの照合と，教材の出力の取得に使う．`git`と，バイト列を表示する`xxd`をDockerfileで入れる．
+- コマンドの時間を測るhyperfineを，miseで入れる．
 - RustOwl(所有権とライフタイムの可視化)を，miseで入れる．VS Codeの拡張機能`cordx56.rustowl-vscode`を`devcontainer.json`に書く．Iteration 1，4，7のノートで使い方を説明する．
 - VS Codeの拡張機能は，ほかに`rust-lang.rust-analyzer`，`vadimcn.vscode-lldb`(デバッガー)，`tamasfe.even-better-toml`，`bierner.markdown-mermaid`を入れる．
 - Mermaidの構文検査と設計の照合には，Node(`mermaid`と`jsdom`)を使う．
@@ -60,6 +62,7 @@ Gitとの互換の方針は次のとおりである．
 | `flate2` | zlibの圧縮と展開 | Iteration 2 |
 | `thiserror` | エラー型 | Iteration 2 |
 | `tempfile`(開発用) | テストの一時ディレクトリ | Iteration 2 |
+| `criterion`(開発用) | ベンチマーク | Iteration 2 |
 
 ### リポジトリの構成
 
@@ -122,8 +125,10 @@ RustにはREPLがないため，ノートの例は`cargo test`で動く小さな
 | --- | --- |
 | 0 | `cargo init --lib --name rgit`，`cargo add`，`cargo build`，`cargo test`，`cargo test --lib`，`cargo test フィルター`，`cargo fmt`，`cargo clippy`，`src/main.rs`の追加と`cargo run` |
 | 1 | RustOwlの表示(カーソルを変数に合わせる) |
-| 2 | `cargo add`の`--features`と`--dev`，`cargo run -- 引数`，`cargo test --test 名前`，`cargo run`の別名 |
+| 2 | `cargo add`の`--features`と`--dev`，`cargo run -- 引数`，`cargo test --test 名前`，`cargo run`の別名，`Cargo.toml`の`[[bench]]`，`cargo bench`，`cargo bench --profile dev` |
 | 5 | `xxd`によるバイト列の表示 |
+| 9 | `cargo build --release`，`hyperfine --warmup` |
+| 11 | `hyperfine -L`と`--prepare` |
 
 ### ノート
 
@@ -131,6 +136,12 @@ RustにはREPLがないため，ノートの例は`cargo test`で動く小さな
 - それぞれの`README.md`に目次を置き，Iterationを作るたびに更新する．
 - Gitのノートは，本物の`git`の配管コマンド(`git cat-file`，`git hash-object`，`git ls-tree`など)で`.git`の中を観察する手順を含める．
 - 例は実際に動かした結果を載せる．
+
+## 速度の計測
+
+- 関数のベンチマークは，criterionで`benches/<名前>.rs`に書き，`Cargo.toml`に`[[bench]]`と`harness = false`を書く．ベンチマークは別のクレートとしてビルドされるので，公開されたAPIだけを使う．入力のデータは，ベンチマークの中で作る．
+- コマンドは，`cargo build --release`で作ったバイナリをhyperfineで測る．測る対象のリポジトリは，演習の手順の中のシェルのコマンドで作る．
+- 教材に載せる測定の結果は，4つのCPUを持つDev Containerで実際に測ったものとし，計算機によって値が変わることを書き添える．
 
 ## テスト
 
