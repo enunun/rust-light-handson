@@ -361,17 +361,56 @@ Options:
   -h, --help         Print help
 ```
 
-### どれだけ速くなるか
+### 速度を測る
 
-次の表は，4つのCPUを持つ環境の測定の結果である．20個のディレクトリに置いた200KBのランダムなファイル2000個を，`--release`のビルドの`rgit`が処理した時間を測った．
+Iteration 9と同じ2000個のファイル(合わせて約80MB)のリポジトリで，4つのCPUを持つDev Containerで測った結果である(値は計算機によって変わる)．
 
-| スレッドの数 | `add` | `status` |
+```console
+$ hyperfine -N --warmup 3 -L jobs 1,2,4 "$RGIT status --jobs {jobs}"
+Benchmark 1: /workspaces/iterations/iteration-11/exercise/target/release/rgit status --jobs 1
+  Time (mean ± σ):     272.2 ms ±  38.1 ms    [User: 196.1 ms, System: 82.0 ms]
+  Range (min … max):   228.0 ms … 339.2 ms    10 runs
+ 
+Benchmark 2: /workspaces/iterations/iteration-11/exercise/target/release/rgit status --jobs 2
+  Time (mean ± σ):     137.5 ms ±   7.9 ms    [User: 187.0 ms, System: 72.8 ms]
+  Range (min … max):   122.7 ms … 158.1 ms    22 runs
+ 
+Benchmark 3: /workspaces/iterations/iteration-11/exercise/target/release/rgit status --jobs 4
+  Time (mean ± σ):      76.8 ms ±   4.5 ms    [User: 189.2 ms, System: 55.5 ms]
+  Range (min … max):    69.6 ms …  87.8 ms    38 runs
+ 
+Summary
+  /workspaces/iterations/iteration-11/exercise/target/release/rgit status --jobs 4 ran
+    1.79 ± 0.15 times faster than /workspaces/iterations/iteration-11/exercise/target/release/rgit status --jobs 2
+    3.54 ± 0.54 times faster than /workspaces/iterations/iteration-11/exercise/target/release/rgit status --jobs 1
+$ hyperfine -N --runs 5 -L jobs 1,2,4 --prepare 'rm -rf .git/objects .git/index' "$RGIT add --jobs {jobs} ."
+Benchmark 1: /workspaces/iterations/iteration-11/exercise/target/release/rgit add --jobs 1 .
+  Time (mean ± σ):      4.673 s ±  0.345 s    [User: 3.232 s, System: 1.420 s]
+  Range (min … max):    4.290 s …  5.044 s    5 runs
+ 
+Benchmark 2: /workspaces/iterations/iteration-11/exercise/target/release/rgit add --jobs 2 .
+  Time (mean ± σ):      2.547 s ±  0.156 s    [User: 3.334 s, System: 1.698 s]
+  Range (min … max):    2.308 s …  2.696 s    5 runs
+ 
+Benchmark 3: /workspaces/iterations/iteration-11/exercise/target/release/rgit add --jobs 4 .
+  Time (mean ± σ):      1.461 s ±  0.022 s    [User: 3.378 s, System: 2.177 s]
+  Range (min … max):    1.435 s …  1.483 s    5 runs
+ 
+Summary
+  /workspaces/iterations/iteration-11/exercise/target/release/rgit add --jobs 4 . ran
+    1.74 ± 0.11 times faster than /workspaces/iterations/iteration-11/exercise/target/release/rgit add --jobs 2 .
+    3.20 ± 0.24 times faster than /workspaces/iterations/iteration-11/exercise/target/release/rgit add --jobs 1 .
+```
+
+| スレッドの数 | `status` | `add` |
 | --- | --- | --- |
-| 1 | 12.6秒 | 0.37秒 |
-| 2 | 6.7秒 | 0.24秒 |
-| 4 | 3.2秒 | 0.13秒 |
+| 1 | 272ms | 4.67秒 |
+| 2 | 138ms(1.98倍) | 2.55秒(1.83倍) |
+| 4 | 77ms(3.54倍) | 1.46秒(3.20倍) |
 
-`add`の時間の多くは，zlibの圧縮である．ファイルごとの処理が独立しているので，スレッドの数にほぼ比例して速くなる．
+- `add`の時間の多くは，zlibの圧縮である．ファイルごとの処理が独立しているので，スレッドの数にほぼ比例して速くなる．
+- `User`の時間は，スレッドの数によらずほぼ同じである．仕事の量は変わらず，同時に進めているだけだからである．`add`の`System`の時間は，スレッドを増やすと増える．多くのスレッドが同時にファイルを作るので，OSの中で待ち合わせの処理が増えると考えられる．
+- アムダールの法則の式に，4つのスレッドで3.20倍を当てはめると，`add`の`p`は約0.92になる．並列にしていない処理(ディレクトリの走査，インデックスの読み書き，プロセスの起動)が，1つのスレッドのときの時間の約8%を使っている．`status`では約4%である．
 
 ## 11-6 振り返り
 
@@ -379,9 +418,12 @@ Options:
 2. あらかじめ分ける方法では，大きなファイルが1つのまとまりに集まると，そのスレッドだけが遅れて終わる．`AtomicUsize`で1つずつ配る方法では，空いたスレッドが次の要素を取るので，偏りの影響を受けにくい．
 3. スレッドごとに別のオブジェクトストアを持たせると，ロックは要らない．その代わり，書いたオブジェクトを最後に1つへまとめる手間がかかる．ディスクのオブジェクトストアは，フィールドを変えずに書けるので，`&self`にするほうが自然である．
 4. 1つのスレッドが書いている間，ほかのスレッドは`lock`で待つ．書き込みは`HashMap`への挿入だけで短いので，`MemoryObjectStore`では問題になりにくい．待ちが問題になるなら，ハッシュの計算や圧縮のような重い処理をロックの外で行う．
-5. 図に描いた型と関係は，コードと一致している．
+5. 並列にしていないのは，ディレクトリの走査，インデックスの読み書き，プロセスの起動などで，`add`では1つのスレッドのときの時間の約8%である．`p = 0.92`なら，8つのスレッドで`1 / (0.08 + 0.92 / 8)`の約5.1倍と見込める．スレッドをいくら増やしても，約12倍を超えない．
+6. 図に描いた型と関係は，コードと一致している．
 
 ## 11-7 発展課題
+
+### エラーで止める
 
 `try_map_parallel`は，`map_parallel`を使って書ける．エラーが起きたことを`AtomicBool`で伝え，以後の要素は`None`にして飛ばす．
 
@@ -436,3 +478,125 @@ for (file, entry) in files.into_iter().zip(entries) {
     index.insert(file, entry);
 }
 ```
+
+### ファイルの状態でハッシュの計算を省く
+
+`work_tree_files`は，ファイルの`fs::metadata`を先に取り，記録と同じなら読まずに済ませる．
+
+```rust
+pub fn work_tree_files(
+    work_dir: &Path,
+    index: &Index,
+    index_time: (u32, u32),
+    jobs: usize,
+) -> Result<BTreeMap<String, (Mode, ObjectId)>, Error> {
+    let paths = list_files(work_dir, work_dir)?;
+    let hashed = map_parallel(&paths, jobs, |path| -> Result<(Mode, ObjectId), Error> {
+        let full_path = work_dir.join(path);
+        let meta = fs::metadata(&full_path)?;
+        let mode = file_mode(&meta);
+        if let Some(id) = cached_id(index, path, &meta, index_time) {
+            return Ok((mode, id));
+        }
+        Ok((mode, hash_blob(&fs::read(&full_path)?)))
+    });
+    paths
+        .into_iter()
+        .zip(hashed)
+        .map(|(path, file)| Ok((path, file?)))
+        .collect()
+}
+
+/// ファイルの状態がインデックスの記録と同じなら，記録したIDを返す．
+/// インデックスを書いた時刻(`index_time`)と同じか後に変わったファイルは，
+/// 同じ時刻のうちに書き換えられたかもしれないので，`None`を返して読ませる．
+fn cached_id(
+    index: &Index,
+    path: &str,
+    meta: &fs::Metadata,
+    index_time: (u32, u32),
+) -> Option<ObjectId> {
+    let entry = index.entries().get(path)?;
+    let stat = Stat::from_metadata(meta);
+    let racy = (stat.mtime, stat.mtime_nsec) >= index_time;
+    (entry.stat == stat && !racy).then_some(entry.id)
+}
+```
+
+- `Stat::from_metadata`は，`add`がインデックスに記録するときと同じ関数である．記録と今の状態を同じ形で比べられる．
+- `(stat.mtime, stat.mtime_nsec) >= index_time`は，タプルの比較で，秒が同じならナノ秒を比べる．
+- `bool::then_some`は，`true`なら`Some(値)`を，`false`なら`None`を返す．
+
+インデックスの時刻は`cli`で求め，`status`と`diff_work_tree`に引数で渡す．
+
+```rust
+/// インデックスのファイルの更新時刻(秒，ナノ秒)．インデックスがなければ`(0, 0)`を返す．
+fn index_time(path: &Path) -> Result<(u32, u32), Error> {
+    match fs::metadata(path) {
+        Ok(meta) => Ok((meta.mtime() as u32, meta.mtime_nsec() as u32)),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok((0, 0)),
+        Err(error) => Err(error.into()),
+    }
+}
+```
+
+単体テストでは，中身と違うIDを，今のファイルの状態とともにインデックスに入れた．
+記録が使われたかどうかが，`status`の結果の違いでわかる．
+
+```rust
+#[test]
+fn files_with_recorded_stat_are_not_read() {
+    let mut fixture = Fixture::new();
+    fixture.write("hello.txt", "hello\n");
+    // 中身と違うIDを，今のファイルの状態とともに記録する．
+    let meta = fs::metadata(fixture.dir.path().join("hello.txt")).unwrap();
+    let entry = IndexEntry {
+        stat: Stat::from_metadata(&meta),
+        mode: Mode::File,
+        id: hash_blob(b"other\n"),
+    };
+    fixture.index.insert(String::from("hello.txt"), entry);
+    let entries = |index_time| {
+        status(
+            &fixture.store,
+            None,
+            &fixture.index,
+            index_time,
+            fixture.dir.path(),
+            2,
+        )
+        .unwrap()
+        .iter()
+        .map(|entry| entry.to_string())
+        .collect::<Vec<_>>()
+    };
+    // インデックスがファイルより後に書かれたなら，ファイルを読まずに記録したIDを使う．
+    assert_eq!(entries((u32::MAX, 0)), ["A  hello.txt"]);
+    // ファイルがインデックスと同じ時刻か後に変わったなら(racy)，読んでハッシュを計算する．
+    assert_eq!(entries((0, 0)), ["AM hello.txt"]);
+}
+```
+
+`status`の結合テストは，`git status --porcelain`と一致したまま通る．
+演習と同じリポジトリで，`git status`と比べた結果である．
+
+```console
+$ hyperfine -N --warmup 3 "$RGIT status" 'git status --porcelain'
+Benchmark 1: /workspaces/iterations/iteration-11/exercise/target/release/rgit status
+  Time (mean ± σ):      31.8 ms ±   7.1 ms    [User: 13.9 ms, System: 27.3 ms]
+  Range (min … max):    18.9 ms …  51.5 ms    97 runs
+ 
+Benchmark 2: git status --porcelain
+  Time (mean ± σ):       6.8 ms ±   1.3 ms    [User: 2.9 ms, System: 6.3 ms]
+  Range (min … max):     5.0 ms …  19.2 ms    553 runs
+ 
+  Warning: Statistical outliers were detected. Consider re-running this benchmark on a quiet system without any interferences from other programs. It might help to use the '--warmup' or '--prepare' options.
+ 
+Summary
+  git status --porcelain ran
+    4.70 ± 1.39 times faster than /workspaces/iterations/iteration-11/exercise/target/release/rgit status
+```
+
+- 4つのスレッドでハッシュを計算していたときの77msから，32msになった．
+- 残りの時間は，インデックスとHEADのツリーの読み込み，ディレクトリの走査，2000個のファイルの`metadata`である．`System`の時間が`User`より長いのは，ファイルの状態を調べるOSの処理が多いからである．
+- `git`は，インデックスの読み込みやディレクトリの走査にも多くの工夫を重ねていて，さらに約5倍速い．

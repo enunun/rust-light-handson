@@ -15,4 +15,4 @@
 | [8](iteration-08.md) | `Iterator`の実装と関連型，`Result`を要素にするイテレーター，遅延評価と`take`，`by_ref`，参照を持つ構造体，`BinaryHeap`，`HashSet`，`Ord`と`Hash`の導出，`let … else` |
 | [9](iteration-09.md) | トレイトの定義と実装，何をトレイトにするか，トレイト境界，`?Sized`，トレイトオブジェクトと`Box<dyn Trait>`，静的ディスパッチと動的ディスパッチ，テストのための差し替え，`BTreeSet`，`Option`の組の`match`，`map_or`，`--release`のビルド，hyperfine |
 | [10](iteration-10.md) | 要素の型を問わないジェネリックな関数と`PartialEq`，操作を表す`enum`，`matches!`，`usize`と`isize`と`as`，`saturating_sub`，`unreachable!`，`split_inclusive`，`from_utf8_lossy`，`fmt::Write`と`write!`，タプル構造体の`Display`，`chunk_by`，`Option::transpose`，ベンチマークのグループ，前回との比較，計算量と測定 |
-| [11](iteration-11.md) | `thread::spawn`と`move`，`thread::scope`，`Arc`，`Send`と`Sync`，`RefCell`を共有したときのコンパイルエラー，親トレイト，`Mutex`と内部可変性，`mpsc`のチャネルと`drop`，`AtomicUsize`と`static`，`Fn`，`FnMut`，`FnOnce`，`where`，`available_parallelism`と`NonZeroUsize` |
+| [11](iteration-11.md) | `thread::spawn`と`move`，`thread::scope`，`Arc`，`Send`と`Sync`，`RefCell`を共有したときのコンパイルエラー，親トレイト，`Mutex`と内部可変性，`mpsc`のチャネルと`drop`，`AtomicUsize`と`static`，`Fn`，`FnMut`，`FnOnce`，`where`，`available_parallelism`と`NonZeroUsize`，hyperfineの`-L`と`--prepare`，経過時間とCPUの時間，アムダールの法則 |
