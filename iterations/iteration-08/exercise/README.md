@@ -23,6 +23,7 @@ TESTLIST.md           テストリスト(見出しだけのひな形)
 docs/iteration-08.md  演習の手順
 design/types.md       型とモジュールの図(Iteration 7の模範解答)
 src/                  Iteration 7の模範解答のコード
+benches/              Iteration 7のベンチマーク
 tests/                Iteration 7の結合テスト
 ```
 

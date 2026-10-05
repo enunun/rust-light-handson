@@ -33,6 +33,7 @@ src/object.rs          オブジェクトの種類，バイト列，ヘッダー
 src/oid.rs             オブジェクトIDの型
 src/tree.rs            treeのモード，エントリー，解析
 src/worktree.rs        作業ディレクトリのファイルの収集
+benches/object.rs      ベンチマーク(SHA-1の計算とzlibの圧縮)
 tests/common/mod.rs    結合テストの補助関数(rgitと本物のgitの実行)
 tests/init.rs          結合テスト(init)
 tests/hash_object.rs   結合テスト(hash-object)

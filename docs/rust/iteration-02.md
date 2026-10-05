@@ -256,3 +256,74 @@ assert_eq!(output.stdout, b"hello\n");
 `tests/`の下のファイルは，それぞれが別のクレートとしてコンパイルされる．
 複数のファイルで使う関数は`tests/common/mod.rs`に置き，各ファイルの先頭で`mod common;`と書く．
 `tests/common.rs`とすると，それ自体が1つのテストのファイルとして扱われる．
+
+## ベンチマーク
+
+テストは正しさを確かめる．速さは，同じ処理を何度も実行して時間を測るベンチマークで確かめる．
+`rgit`では，ベンチマークのクレートcriterionを使う．テストと同じく`--dev`で加える．
+
+```console
+$ cargo add --dev criterion
+    Updating crates.io index
+      Adding criterion v0.8.2 to dev-dependencies
+(略)
+```
+
+ベンチマークは`benches/<名前>.rs`に書き，`Cargo.toml`に次を書き加える．
+`harness = false`は，Rustの標準のテストの仕組みの代わりに，criterionの`main`を使う指定である．
+
+```toml
+[[bench]]
+name = "object"
+harness = false
+```
+
+```rust
+use std::hint::black_box;
+
+use criterion::{Criterion, criterion_group, criterion_main};
+use rgit::hash_blob;
+
+fn object(c: &mut Criterion) {
+    let data = vec![b'a'; 1 << 20];
+    c.bench_function("hash_blob", |b| b.iter(|| hash_blob(black_box(&data))));
+}
+
+criterion_group!(benches, object);
+criterion_main!(benches);
+```
+
+- `bench_function`は，名前と，測る処理を受け取る．`b.iter`に渡したクロージャを何度も呼び，1回あたりの時間を求める．
+- `benches/`の下のファイルは，`tests/`と同じく別のクレートとしてコンパイルされる．使えるのは`pub`の項目だけである．
+- `criterion_group!`と`criterion_main!`は，ベンチマークの関数をまとめ，`main`関数を作るマクロである．
+
+### `black_box`
+
+コンパイラーは，結果を使わない計算や，入力が決まっている計算を，コンパイルの時点で省いたり済ませたりすることがある．
+`std::hint::black_box`に通した値は，コンパイラーから中身が分からないものとして扱われる．測りたい計算が省かれなくなる．
+
+### `cargo bench`と最適化
+
+`cargo bench`は，最適化したビルド(`bench`プロファイル)でベンチマークを実行する．
+`cargo build`，`cargo test`，`cargo run`は，最適化しないビルド(`dev`プロファイル)を使う．コンパイルは速いが，できたプログラムは遅い．
+
+| プロファイル | 使うコマンド | 最適化 |
+| --- | --- | --- |
+| `dev` | `cargo build`，`cargo test`，`cargo run` | しない |
+| `release` | `cargo build --release`，`cargo run --release` | する |
+| `bench` | `cargo bench` | する(`release`と同じ設定) |
+
+速さを話題にするときは，最適化したビルドで測る．
+`cargo bench --profile dev`で，最適化しないビルドのまま測ることもできる．
+
+### 結果の読み方
+
+```console
+hash_blob               time:   [759.61 µs 765.73 µs 773.42 µs]
+Found 8 outliers among 100 measurements (8.00%)
+```
+
+- `time`の3つの値は，1回あたりの時間の推定の下限，中央，上限である．真ん中の値を読む．
+- criterionは，100回の測定(サンプル)を集める．`outliers`は，ほかの測定から大きく外れた測定の数である．ほかのプログラムが動いた，などの影響を受けた測定である．
+- 結果は`target/criterion/`に保存される．次に測ると，前回の結果との差を`change`として表示する．
+- `Gnuplot not found, using plotters backend`は，グラフを描くgnuplotがないので，代わりのクレートを使うという知らせである．測定には影響しない．

@@ -30,23 +30,27 @@ $ cargo add flate2 thiserror
 (略)
 ```
 
-テストで一時ディレクトリを作る`tempfile`は，テストでだけ使うので`--dev`を付けて追加する．
+テストで一時ディレクトリを作る`tempfile`と，速度を測るcriterionは，テストとベンチマークでだけ使うので`--dev`を付けて追加する．
 
 ```console
 $ cargo add --dev tempfile
     Updating crates.io index
       Adding tempfile v3.27.0 to dev-dependencies
 (略)
+$ cargo add --dev criterion
+    Updating crates.io index
+      Adding criterion v0.8.2 to dev-dependencies
+(略)
 ```
 
-`Cargo.toml`に`[dependencies]`の3つと，`[dev-dependencies]`の`tempfile`が加わったことを確かめる．
+`Cargo.toml`に`[dependencies]`の3つと，`[dev-dependencies]`の`tempfile`と`criterion`が加わったことを確かめる．
 
 ## 2-2 文法と概念
 
 次の2つのノートを読む．
 
-- [Rustのノート](../../../../docs/rust/iteration-02.md)：属性とderive，clap，パス，ファイルの操作，`Write`トレイト，`?`とthiserror，`if let`と`matches!`，外部のコマンドを実行するテスト
-- [Gitのノート](../../../../docs/git/iteration-02.md)：`.git`の構成，ゆるいオブジェクト，zlib
+- [Rustのノート](../../../../docs/rust/iteration-02.md)：属性とderive，clap，パス，ファイルの操作，`Write`トレイト，`?`とthiserror，`if let`と`matches!`，外部のコマンドを実行するテスト，ベンチマーク
+- [Gitのノート](../../../../docs/git/iteration-02.md)：`.git`の構成，ゆるいオブジェクト，zlib，圧縮の強さと速さ
 
 読み終えたら，`src/lib.rs`の末尾に`#[cfg(test)] mod practice`を作り，次の課題を確かめる．
 
@@ -154,13 +158,30 @@ $ echo $?
 128
 ```
 
+### 速度を測る
+
+テストがすべて通ったら，`hash-object -w`の中の2つの重い処理，SHA-1の計算とzlibの圧縮の速さを測る．
+
+1. `Cargo.toml`に`[[bench]]`を書き，`benches/object.rs`を作る(書き方はRustのノートにある)．
+2. 1MiBほどのデータを作り，次の3つを`bench_function`で測る．
+   - `hash_blob`
+   - `write_blob`と同じ`Compression::default()`での圧縮
+   - `Compression::fast()`での圧縮
+3. `cargo bench --bench object`で測る．`--bench object`は，`benches/object.rs`のベンチマークだけを実行する指定である．
+4. 続けて`cargo bench --profile dev --bench object`で，最適化しないビルドでも測る．criterionは前回の結果との差を表示する．
+
+圧縮はflate2を直接呼んで測ってよい．`write_blob`はファイルを書き，同じオブジェクトが2回目からは書かれないので，圧縮だけの速さを測れない．
+3つの時間を，どれが何倍遅いかの形で書き留めておく．
+
 ## 2-6 振り返り
 
 1. 自分の`TESTLIST.md`を[模範解答のテストリスト](../../solution/TESTLIST.md)と比べる．
 2. `run`は標準出力に直接書かず，`out`に書く．標準出力に直接書く設計と比べて，テストはどう変わるか．
 3. `Error`に`io::Error`と`clap::Error`を包んだ．`run`の中で`?`を使えるのはなぜか．包まずに`Box<dyn std::error::Error>`を返す設計と比べて，呼び出す側は何ができるか．
 4. 本物の`git`を使うテストと，`rgit`の中だけで確かめるテストは，それぞれ何を保証するか．
-5. 図と実装を見比べ，違うところがあれば図を直す．
+5. 測った結果から，`hash-object -w`の時間の多くは何に使われるか．本物の`git`がゆるいオブジェクトを`Compression::fast()`と同じ強さ1で圧縮するのはなぜか．
+6. `cargo test`にかかる時間から，`rgit`の速さを判断してはいけないのはなぜか．
+7. 図と実装を見比べ，違うところがあれば図を直す．
 
 ## 2-7 発展課題
 

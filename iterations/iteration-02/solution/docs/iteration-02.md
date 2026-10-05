@@ -22,8 +22,15 @@ sha1 = "0.11.0"
 thiserror = "2.0.21"
 
 [dev-dependencies]
+criterion = "0.8.2"
 tempfile = "3.27.0"
+
+[[bench]]
+name = "object"
+harness = false
 ```
+
+`[[bench]]`は，2-5の最後で速度を測るときに書き加える．
 
 ## 2-2 文法と概念
 
@@ -457,13 +464,128 @@ fn main() {
 `match`の2つ目の腕のパターン`error`は，`Error::Usage`以外のすべての値と一致する．腕の中では，その値を`error`という名前で使える．
 `Error::Usage`の`exit()`は，`--help`なら終了コード0で，引数の誤りなら2で終わる．
 
+### 速度を測る
+
+`benches/object.rs`である．
+圧縮は，`write_blob`と同じくflate2の`ZlibEncoder`で行い，強さを引数で選べるようにした．
+
+```rust
+use std::hint::black_box;
+use std::io::Write;
+
+use criterion::{Criterion, criterion_group, criterion_main};
+use flate2::Compression;
+use flate2::write::ZlibEncoder;
+use rgit::hash_blob;
+
+/// 1MiBのテキスト(数を1行ずつ並べたもの)．
+fn sample() -> Vec<u8> {
+    (0..)
+        .flat_map(|i| format!("{i}\n").into_bytes())
+        .take(1 << 20)
+        .collect()
+}
+
+/// zlibで圧縮する．`Repository::write_blob`は`Compression::default()`を使う．
+fn compress(data: &[u8], level: Compression) -> Vec<u8> {
+    let mut encoder = ZlibEncoder::new(Vec::new(), level);
+    encoder.write_all(data).unwrap();
+    encoder.finish().unwrap()
+}
+
+fn object(c: &mut Criterion) {
+    let data = sample();
+    c.bench_function("hash_blob", |b| b.iter(|| hash_blob(black_box(&data))));
+    c.bench_function("compress_default", |b| {
+        b.iter(|| compress(black_box(&data), Compression::default()))
+    });
+    c.bench_function("compress_fast", |b| {
+        b.iter(|| compress(black_box(&data), Compression::fast()))
+    });
+}
+
+criterion_group!(benches, object);
+criterion_main!(benches);
+```
+
+- データは，数を1行ずつ並べたテキストを`take(1 << 20)`で1MiBにしたものである．同じ文字の繰り返しのようなデータは，圧縮がとても速く終わり，実際のファイルに近くない．
+- データはベンチマークの前に1回だけ作り，`b.iter`の中では測りたい処理だけを呼ぶ．
+
+最適化したビルドの結果である(値は計算機によって変わる)．
+
+```console
+$ cargo bench --bench object
+(略)
+    Finished `bench` profile [optimized] target(s) in 1.71s
+     Running benches/object.rs (target/release/deps/object-3bdc14af7c08dec4)
+Gnuplot not found, using plotters backend
+hash_blob               time:   [759.61 µs 765.73 µs 773.42 µs]
+Found 8 outliers among 100 measurements (8.00%)
+  5 (5.00%) high mild
+  3 (3.00%) high severe
+
+compress_default        time:   [41.189 ms 41.614 ms 42.077 ms]
+Found 4 outliers among 100 measurements (4.00%)
+  3 (3.00%) high mild
+  1 (1.00%) high severe
+
+compress_fast           time:   [4.3219 ms 4.4170 ms 4.5207 ms]
+Found 11 outliers among 100 measurements (11.00%)
+  9 (9.00%) high mild
+  2 (2.00%) high severe
+```
+
+最適化しないビルドの結果である．`change`は，直前の最適化したビルドとの差である．
+
+```console
+$ cargo bench --profile dev --bench object
+(略)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.54s
+     Running benches/object.rs (target/debug/deps/object-051526f38eb29513)
+Gnuplot not found, using plotters backend
+hash_blob               time:   [9.8023 ms 9.9718 ms 10.173 ms]
+                        change: [+1149.0% +1175.8% +1206.3%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 15 outliers among 100 measurements (15.00%)
+  7 (7.00%) high mild
+  8 (8.00%) high severe
+
+Warning: Unable to complete 100 samples in 5.0s. You may wish to increase target time to 27.4s, or reduce sample count to 10.
+compress_default        time:   [281.76 ms 286.35 ms 291.30 ms]
+                        change: [+575.09% +588.12% +602.15%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 6 outliers among 100 measurements (6.00%)
+  6 (6.00%) high mild
+
+Warning: Unable to complete 100 samples in 5.0s. You may wish to increase target time to 7.4s, or reduce sample count to 60.
+compress_fast           time:   [72.317 ms 73.393 ms 74.582 ms]
+                        change: [+1515.8% +1561.6% +1608.0%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 9 outliers among 100 measurements (9.00%)
+  7 (7.00%) high mild
+  2 (2.00%) high severe
+```
+
+| 処理 | 最適化あり | 最適化なし |
+| --- | --- | --- |
+| `hash_blob` | 0.77ms | 10.0ms |
+| 圧縮(`Compression::default()`) | 41.6ms | 286ms |
+| 圧縮(`Compression::fast()`) | 4.4ms | 73.4ms |
+
+- 最適化したビルドでは，強さ6の圧縮はSHA-1の計算の約50倍の時間がかかる．`hash-object -w`の時間の多くは圧縮である．
+- 強さ1の圧縮は，強さ6の約9分の1の時間で終わる．
+- 最適化しないビルドは，処理によって7倍から17倍遅い．
+- 最適化しないビルドの圧縮は，既定の5秒では100回を測りきれない．criterionは`Warning`を出し，時間を延ばして100回を測る．
+
 ## 2-6 振り返り
 
 1. 模範解答の結合テストは，`git`で確かめられることは`git`で確かめている．`rgit`の中だけで確かめると，誤った形式で書いて誤った形式で読むテストが通ってしまう．
 2. `out`に書く設計では，テストは`Vec<u8>`を渡して出力を文字列として比べられる．標準出力に直接書くと，テストはプログラムを別のプロセスとして起動し，その出力を読む必要がある．
 3. `Error`が`From<io::Error>`と`From<clap::Error>`を持つので，`?`はどちらのエラーも`Error`に変えて返せる．呼び出す側(`main.rs`)は列挙子で`match`し，引数の誤りだけをclapに表示させられる．`Box<dyn std::error::Error>`では，どの種類のエラーかを型で区別できない．
 4. 本物の`git`を使うテストは，`rgit`の出力が本物のGitの形式と一致することを保証する．`rgit`の中だけのテストは，`rgit`の関数が設計どおりに動くことを保証し，`git`がなくても動く．
-5. 図に描いた関係は，コードと一致している．
+5. 時間の多くは圧縮に使われる．ゆるいオブジェクトは`add`や`commit`のたびに書くので，`git`は少し大きくなっても速い強さ1を選ぶ．小ささが大事なパックファイルは，`git gc`でまとめるときに強く圧縮し直す．
+6. `cargo test`は最適化しないビルドで動き，テストの時間の多くはコンパイルと`git`の起動である．速さは，最適化したビルドで，測りたい処理だけを繰り返して測る．
+7. 図に描いた関係は，コードと一致している．
 
 ## 2-7 発展課題
 

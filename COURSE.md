@@ -114,7 +114,7 @@ RustにはREPLがないため，ノートの例は`cargo test`で動く小さな
 
 - `cargo fmt --all --check`と`cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo test --workspace`(すべての模範解答)
-- `scripts/test-exercises.sh`(`Cargo.toml`のあるすべての演習をビルドしてテストする)
+- `scripts/test-exercises.sh`(`Cargo.toml`のあるすべての演習をビルドし，テストとベンチマークを1回ずつ実行する)
 - `pnpm lint`(textlint，markdownlint，Mermaidの構文検査，設計の照合)
 
 ### 受講者が行うツール操作

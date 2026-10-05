@@ -30,6 +30,7 @@ src/repo.rs            リポジトリの作成，発見，オブジェクトの
 src/error.rs           エラー型
 src/object.rs          オブジェクトの種類，バイト列，ヘッダーの解析
 src/oid.rs             オブジェクトIDの型
+benches/object.rs      ベンチマーク(SHA-1の計算とzlibの圧縮)
 tests/common/mod.rs    結合テストの補助関数(rgitと本物のgitの実行)
 tests/init.rs          結合テスト(init)
 tests/hash_object.rs   結合テスト(hash-object)

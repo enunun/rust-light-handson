@@ -44,6 +44,7 @@ src/parallel.rs        複数のスレッドで要素ごとの処理を行う関
 src/refs.rs            参照名と参照
 src/tree.rs            treeのモード，エントリー，解析，書き込み，展開
 src/worktree.rs        作業ディレクトリのファイルの収集
+benches/object.rs      ベンチマーク(SHA-1の計算とzlibの圧縮)
 tests/common/mod.rs    結合テストの補助関数(rgitと本物のgitの実行，作者とコミッターの環境変数)
 tests/init.rs          結合テスト(init)
 tests/hash_object.rs   結合テスト(hash-object)

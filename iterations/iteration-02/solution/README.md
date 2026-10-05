@@ -6,6 +6,7 @@
 ## 実行の仕方
 
 このディレクトリで`cargo test`を実行すると，単体テストと結合テストが実行される．
+`cargo bench --bench object`で，SHA-1の計算とzlibの圧縮の速さを測る．
 別のディレクトリで試すには，別名を作る．
 
 ```console
@@ -30,6 +31,7 @@ src/repo.rs            リポジトリの作成，発見，オブジェクトの
 src/error.rs           エラー型
 src/object.rs          blobのバイト列とハッシュ
 src/oid.rs             オブジェクトIDの型
+benches/object.rs      ベンチマーク(SHA-1の計算とzlibの圧縮)
 tests/common/mod.rs    結合テストの補助関数(rgitと本物のgitの実行)
 tests/init.rs          結合テスト(init)
 tests/hash_object.rs   結合テスト(hash-object)

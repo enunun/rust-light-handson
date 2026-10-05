@@ -6,7 +6,7 @@
 | --- | --- |
 | [0](iteration-00.md) | 内容アドレス，blobオブジェクトとヘッダー，SHA-1 |
 | [1](iteration-01.md) | 20バイトと40桁の表記，短縮形 |
-| [2](iteration-02.md) | `.git`の構成，`HEAD`，ゆるいオブジェクト，zlib |
+| [2](iteration-02.md) | `.git`の構成，`HEAD`，ゆるいオブジェクト，zlib，圧縮の強さと速さ |
 | [3](iteration-03.md) | オブジェクトを読む手順，`git cat-file`，短縮形の解決と曖昧さ |
 | [4](iteration-04.md) | treeオブジェクト，`git ls-tree`，ファイルのモード，treeの内容のバイト列 |
 | [5](iteration-05.md) | インデックスの役割，ファイルの状態，インデックスの形式 |
