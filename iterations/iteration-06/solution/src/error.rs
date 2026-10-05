@@ -1,0 +1,30 @@
+use thiserror::Error;
+
+/// `rgit`の操作が失敗した理由．
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("not a git repository (or any of the parent directories): .git")]
+    NotARepository,
+    #[error("Not a valid object name {0}")]
+    ObjectNotFound(String),
+    #[error("short object ID {0} is ambiguous")]
+    AmbiguousObject(String),
+    #[error("not a tree object")]
+    NotATree,
+    #[error("corrupt object: {0}")]
+    CorruptObject(&'static str),
+    #[error("corrupt index: {0}")]
+    CorruptIndex(&'static str),
+    #[error("pathspec '{0}' did not match any files")]
+    PathspecNotMatched(String),
+    #[error("{0}: '{0}' is outside repository")]
+    OutsideRepository(String),
+    #[error("environment variable {0} is not set")]
+    MissingVariable(String),
+    #[error("invalid date format: {0}")]
+    InvalidDate(String),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Usage(#[from] clap::Error),
+}
